@@ -832,6 +832,29 @@ class Agent:
                         except Exception:
                             pass
 
+                    # v3: detail_edit 写入工具成功后推预览 (不含 diff, 只展示文档 + 下载)
+                    if self.mode == DETAIL_EDIT and name != "request_more_tools":
+                        try:
+                            _r = json.loads(result)
+                            if _r.get("status") == "ok" and _r.get("output_path"):
+                                _out = resolve_workspace_path(
+                                    self.session_id, _r["output_path"],
+                                    must_exist=True, must_be_file=True,
+                                )
+                                yield {
+                                    "type": "docx_preview_ready",
+                                    "preview_path": _r["output_path"],
+                                    "input_path": _r.get("docx_path", ""),
+                                    "docx_mtime_ms": int(_out.stat().st_mtime * 1000),
+                                    "paragraph_changes": [],
+                                    "changed_files": [],
+                                    "diagnostics": [],
+                                    "action_count": 1,
+                                    "support_summary": {"native": 1, "degraded": 0, "rejected": 0},
+                                }
+                        except Exception:
+                            pass  # 静默, 不影响主流程
+
                     # 追踪 write_markdown_draft 写入的文件路径, 供 wait_approval 读取
                     if name == "write_markdown_draft":
                         try:
