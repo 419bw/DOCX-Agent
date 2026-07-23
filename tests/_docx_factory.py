@@ -362,7 +362,7 @@ def tmp_root(tmp_path, monkeypatch):
     来源: tests/test_unzip_docx_sandbox.py:17 / test_render_diagram.py:36.
     """
     import workspace.guard as guard  # 严格在 fixture 内
-    mock_root = tmp_path / "sessions"
+    mock_root = tmp_path / "out" / "sessions"
     monkeypatch.setattr(guard, "WORKSPACE_ROOT", mock_root)
     return mock_root
 

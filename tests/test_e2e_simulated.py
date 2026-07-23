@@ -162,9 +162,7 @@ def test_detail_edit_full_e2e(tmp_root, session_id):
     assert types.count("round_start") == 4, f"应有 4 轮 round_start, 实际 {types.count('round_start')}"
     assert types.count("tool_start") == 3, "应有 3 次工具调用 (ls + replace_text + diff_docx)"
     assert types.count("tool_end") == 3
-    # 注: docx_preview_ready 在测试环境不触发 (json_result._clean 匹配 "out/sessions/"
-    # 前缀转相对路径, 测试用临时目录匹配不到, 路径留绝对 → resolve_workspace_path 拒绝)
-    # 生产环境 WORKSPACE_ROOT=out/sessions, _clean 正常转相对路径, 预览正常
+    assert "docx_preview_ready" in types, "replace_text 后应有预览事件"
     assert types[-1] == "done", "最后应是 done"
 
     # 验证工具选用结果
@@ -175,6 +173,11 @@ def test_detail_edit_full_e2e(tmp_root, session_id):
     # 验证 replace_text 真的生效了
     from _docx_factory import get_xml_text
     assert "实验目标" in get_xml_text(ws / "test.docx", "//w:t")
+
+    # 验证预览事件有 diff 数据
+    preview = next(e for e in events if e["type"] == "docx_preview_ready")
+    assert "test.docx" in preview["preview_path"]
+    assert "paragraph_changes" in preview
 
     # 验证 done 后 workflow_state 不是 "done" (支持 resume)
     assert agent.workflow_state != "done"
