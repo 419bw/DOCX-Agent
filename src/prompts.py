@@ -2,11 +2,12 @@
 DOCX Agent 提示词与状态名常量模块。
 
 从 src/agent.py 抽出(Step A 重构): 包含
-- 状态名常量 (STYLE_REVIEW / MD_DRAFT / WORD_EDITING)
+- 状态名常量 (STYLE_REVIEW / MD_DRAFT / WORD_EDITING / DETAIL_EDIT)
 - 各阶段允许的工具名集合 (*_TOOL_NAMES)
 - LLM 系统提示词 (SYSTEM_PROMPT)
-- 阶段→工具 schema 过滤函数 (tool_schemas_for_state)
-- 阶段→完整提示词生成函数 (state_prompt, 拼接 state_rule + 工具列表)
+- 阶段→工具 schema 过滤函数 (tool_schemas_for_state / tool_schemas_for_detail_edit)
+- 阶段→完整提示词生成函数 (state_prompt / detail_edit_prompt)
+- 工具选用 agent 提示词 (TOOL_SELECTION_SYSTEM_PROMPT)
 
 agent.py 顶部 re-export 这些符号, 保持 `from agent import SYSTEM_PROMPT` 等旧 import 兼容。
 """
@@ -18,6 +19,60 @@ from docx_tools import TOOLS_SCHEMA, render_tools_prompt
 STYLE_REVIEW = "style_review"
 MD_DRAFT = "md_draft"
 WORD_EDITING = "word_editing"
+DETAIL_EDIT = "detail_edit"  # 细致编辑模式: 对已完成文档做精细化编辑
+
+
+# === 细致编辑模式: 基础工具(始终可用, 不经过选用 agent) ===
+# 只读探查 + 验证 + 沟通类, 任何编辑任务都离不开
+DETAIL_EDIT_BASE_TOOLS = {
+    "read_docx_structure",
+    "find_text",
+    "ls",
+    "read",
+    "diff_docx",
+    "request_more_tools",
+}
+
+
+# === request_more_tools 工具 schema (仅 detail_edit 模式动态追加) ===
+# 不注册到全局 TOOLS/TOOLS_SCHEMA, 由 tool_schemas_for_detail_edit 内联追加
+REQUEST_MORE_TOOLS_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "request_more_tools",
+        "description": (
+            "当现有工具集不足以完成当前编辑任务时，调用此工具请求增加工具。"
+            "说明你需要什么能力以及为什么当前工具不够用。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "说明为什么需要更多工具，以及需要什么能力（如：需要插入图片、需要操作表格、需要设置段落格式等）",
+                },
+            },
+            "required": ["reason"],
+        },
+    },
+}
+
+
+# === 工具选用 agent 系统提示词 ===
+TOOL_SELECTION_SYSTEM_PROMPT = """
+你是一个工具选用 agent。你的唯一任务是：根据用户的编辑需求和文档结构，从工具目录中选出最合适的工具子集。
+
+规则：
+1. 只输出一个 JSON 数组，元素为工具名字符串，不要输出任何其他文字。
+2. 选出的工具应当精确覆盖用户需求，不要多选也不要漏选。
+3. 以下基础工具已默认提供，不需要你选择：read_docx_structure, find_text, ls, read, diff_docx。
+4. 你只需要从工具目录中选择写入/修改类工具。
+5. 如果用户需求涉及多种操作（如替换文本 + 插入段落 + 设置格式），把相关工具都选上。
+6. 不要选择与用户需求无关的工具。
+
+输出格式（严格 JSON，不要 markdown 代码块）：
+["tool_name_1", "tool_name_2", ...]
+""".strip()
 
 
 # === 各阶段允许 LLM 调用的工具名集合 ===
@@ -118,3 +173,37 @@ def state_prompt(state: str, available_tool_schemas) -> str:
 """.strip()
 
     return f"{state_rule}\n\n当前可用工具：\n{render_tools_prompt(available_tool_schemas)}"
+
+
+# === 细致编辑模式: 工具 schema 过滤 + 提示词 ===
+
+def tool_schemas_for_detail_edit(selected_tools: set) -> list:
+    """细致编辑模式的工具 schema 过滤。
+
+    返回: 基础工具 + 选用工具的 schema 列表 + request_more_tools schema。
+    selected_tools 中不在 TOOLS_SCHEMA 的名字会被静默忽略。
+    """
+    allowed = set(selected_tools) | DETAIL_EDIT_BASE_TOOLS
+    schemas = [s for s in TOOLS_SCHEMA if s["function"]["name"] in allowed]
+    # request_more_tools 不在全局 TOOLS_SCHEMA, 内联追加
+    schemas.append(REQUEST_MORE_TOOLS_SCHEMA)
+    return schemas
+
+
+def detail_edit_prompt(selected_tool_schemas) -> str:
+    """细致编辑模式的完整提示词: state_rule + 工具列表。"""
+    state_rule = """
+当前状态：细致编辑。
+你的任务：使用当前可用的工具对已有文档进行精细化编辑。
+规则：
+1. 先用 read_docx_structure 了解文档当前结构和内容，再用 find_text 定位需要编辑的位置。
+2. 编辑操作要精确，避免影响无关内容。插入文字时优先保留原 run 格式。
+3. 表格操作前必须用 read_docx_structure 确认目标表格的 table_index、行、列（table_index 按 //w:tbl 全文计数，嵌套表格也会计数）。
+4. 段落操作必须同时传入 paragraph_index 和 anchor_text 定位，以防文本错位。
+5. 编辑后必须调用 diff_docx 验证变化，确认只改了该改的内容。
+6. 如果当前工具集不足以完成任务，调用 request_more_tools 说明原因，系统会自动扩充工具。
+7. 完成所有编辑后，输出变更摘要（改了什么、在哪里），不再调用工具。
+8. 当需要理解图片视觉内容时，使用 analyze_image_content，不要凭文件名猜测。
+9. 大文件用 read 的 offset/limit 分段读取，每次不超过 500 行。
+""".strip()
+    return f"{state_rule}\n\n当前可用工具：\n{render_tools_prompt(selected_tool_schemas)}"
