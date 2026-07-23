@@ -824,6 +824,14 @@ class Agent:
                     if preview_event:
                         yield preview_event
 
+                    # v3: request_more_tools 后推 tool_selection_end, 让前端更新工具集 chips
+                    if name == "request_more_tools":
+                        try:
+                            _rmt = json.loads(result)
+                            yield {"type": "tool_selection_end", "selected_tools": _rmt.get("total_tools", [])}
+                        except Exception:
+                            pass
+
                     # 追踪 write_markdown_draft 写入的文件路径, 供 wait_approval 读取
                     if name == "write_markdown_draft":
                         try:
@@ -862,7 +870,8 @@ class Agent:
             # === v3: detail_edit 模式 — 无审批, 直接 done ===
             if self.mode == DETAIL_EDIT:
                 self._append_log("细致编辑流完成", {"state": DETAIL_EDIT})
-                self.workflow_state = "done"
+                # 注意: 不设 workflow_state = "done", 保持 DETAIL_EDIT
+                # 这样 resume 时 step() 不会直接 return, 用户可以继续发消息编辑
                 self._checkpoint()
                 yield {"type": "done", "content": accumulated_content}
                 return

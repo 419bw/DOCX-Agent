@@ -62,7 +62,11 @@ def load_document_xml(docx_path: str):
 
 
 def write_document_xml(input_docx: str, output_docx: str, document_root) -> None:
-    output_path = Path(output_docx)
+    # v3: 同路径防御 — input == output 时先写临时文件再原子替换, 避免 "w" 模式截断正在读的文件
+    same_file = Path(input_docx).resolve() == Path(output_docx).resolve()
+    actual_output = str(Path(output_docx).with_suffix(".docx.tmp")) if same_file else output_docx
+
+    output_path = Path(actual_output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # 1. 扫描 document_root 中的所有 r:embed 属性，寻找以 TEMP_IMG_REL: 开头的值
@@ -188,7 +192,7 @@ def write_document_xml(input_docx: str, output_docx: str, document_root) -> None
 
     # 3. 写回 ZIP 文件并注入媒体文件
     with zipfile.ZipFile(input_docx, "r") as zin:
-        with zipfile.ZipFile(output_docx, "w", zipfile.ZIP_DEFLATED) as zout:
+        with zipfile.ZipFile(actual_output, "w", zipfile.ZIP_DEFLATED) as zout:
             for item in zin.infolist():
                 if item.filename == "word/document.xml":
                     zout.writestr(item, document_bytes)
@@ -205,6 +209,11 @@ def write_document_xml(input_docx: str, output_docx: str, document_root) -> None
                 if local_path.exists():
                     with open(local_path, "rb") as f_img:
                         zout.writestr(f"word/{zip_target}", f_img.read())
+
+    # v3: 同路径时原子替换 (临时文件 → 原文件)
+    if same_file:
+        import os
+        os.replace(actual_output, output_docx)
 
 
 def file_sha256(path: Path) -> str:

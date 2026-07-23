@@ -301,8 +301,12 @@ export default function Home() {
 
     if (!hasActiveConnection()) {
       isScrolledToBottom.current = true;
-      // v3: 统一走 start; 有 currentSessionId (如上传创建的) 则传 session_id 复用
-      startAgentSession(prompt, docxPath, undefined, editMode, currentSessionId || undefined);
+      // v3: 有消息历史 → resume (从磁盘加载上下文); 无历史 → start 新建 (传 mode + 可选 session_id)
+      if (currentSessionId && messages.length > 0) {
+        startAgentSession(prompt, docxPath, currentSessionId);
+      } else {
+        startAgentSession(prompt, docxPath, undefined, editMode, currentSessionId || undefined);
+      }
       return;
     }
 

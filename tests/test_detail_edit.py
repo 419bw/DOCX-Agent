@@ -174,7 +174,99 @@ def test_detail_edit_done_on_content():
 
     types = [e["type"] for e in events]
     assert "done" in types
-    assert agent.workflow_state == "done"
+    # v3: detail_edit done 后 workflow_state 保持 DETAIL_EDIT (不是 "done"), 以支持 resume 续编
+    assert agent.workflow_state != "done"
+
+    shutil.rmtree(tmpdir)
+
+
+# === done 后 resume 保持上下文 (Bug #8 回归) ===
+
+def test_detail_edit_done_then_resume():
+    """回归: detail_edit done 后 resume, mode/selected_tools/消息历史完整恢复"""
+    tmpdir = Path(tempfile.mkdtemp())
+    agent, _, llm = _make_agent(mode="detail_edit", tmpdir=tmpdir)
+    agent.selected_tools = {"replace_text"} | DETAIL_EDIT_BASE_TOOLS
+    agent._doc_structure_cache = '{"test": true}'
+
+    # 跑一轮 done
+    async def run():
+        async for event in agent.step():
+            if event.get("type") == "done":
+                break
+    asyncio.run(run())
+    agent.save_to_disk()
+
+    # resume: 从磁盘恢复
+    restored = Agent.load_from_disk(
+        session_dir=agent.session_dir,
+        llm_adapter=llm,
+        system_prompt="test-system-prompt",
+        docx_path="test.docx",
+    )
+    assert restored.mode == "detail_edit"
+    assert "replace_text" in restored.selected_tools
+    assert restored._doc_structure_cache == '{"test": true}'
+    # workflow_state 不是 "done", resume 后 step() 不会直接 return
+    assert restored.workflow_state != "done"
+    # 消息历史保留
+    assert len(restored.msg_mgr._entries) > 0
+
+    shutil.rmtree(tmpdir)
+
+
+# === request_more_tools yield tool_selection_end (Bug #9 回归) ===
+
+def test_request_more_tools_yields_tool_selection_end():
+    """回归: request_more_tools 后 step() 事件流包含 tool_selection_end"""
+    agent, tmpdir, llm = _make_agent(mode="detail_edit")
+    agent.selected_tools = {"replace_text"} | DETAIL_EDIT_BASE_TOOLS
+    agent._doc_structure_cache = "{}"
+
+    # mock LLM: 第一轮返回 request_more_tools 工具调用, 第二轮返回纯文本 done
+    call_count = [0]
+    original_create = llm.create_chat_completion
+    def mock_stream(messages, tools=None, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # 第一轮: 返回 request_more_tools 工具调用
+            chunk = MagicMock()
+            chunk.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+            delta = MagicMock()
+            delta.content = None
+            delta.reasoning_content = None
+            delta.model_extra = None
+            tc = MagicMock()
+            tc.index = 0
+            tc.id = "call_rmt_1"
+            tc.function.name = "request_more_tools"
+            tc.function.arguments = '{"reason": "需要插入图片"}'
+            delta.tool_calls = [tc]
+            choice = MagicMock()
+            choice.finish_reason = "tool_calls"
+            choice.delta = delta
+            chunk.choices = [choice]
+            return [chunk]
+        else:
+            # 第二轮: 纯文本 done
+            return original_create(messages, tools, **kwargs)
+
+    llm.create_chat_completion = mock_stream
+    llm._blocking_response = '["insert_image_after_paragraph"]'
+
+    events = []
+    async def run():
+        async for event in agent.step():
+            events.append(event)
+            if event.get("type") == "done":
+                break
+    asyncio.run(run())
+
+    types = [e["type"] for e in events]
+    assert "tool_selection_end" in types, f"事件流中应有 tool_selection_end, 实际: {types}"
+    # tool_selection_end 应包含扩充后的工具列表
+    tse = next(e for e in events if e["type"] == "tool_selection_end")
+    assert "insert_image_after_paragraph" in tse["selected_tools"]
 
     shutil.rmtree(tmpdir)
 

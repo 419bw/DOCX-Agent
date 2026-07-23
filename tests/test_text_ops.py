@@ -230,6 +230,24 @@ class TestReplaceText:
         ))
         assert result["status"] == "not_found"
 
+    def test_same_input_output_path_no_corruption(self, tmp_root, session_id):
+        """回归: docx_path == output_path 时文件不损坏 (Bug #7 同路径截断)."""
+        docx_path = _ws(tmp_root, session_id) / "in.docx"
+        _build_minimal_docx(docx_path, ["hello world"])
+        original_size = docx_path.stat().st_size
+
+        result = json.loads(replace_text(
+            session_id, "in.docx", "in.docx", "world", "世界"
+        ))
+
+        assert result["status"] == "ok"
+        # 文件不损坏: 大小合理 (不能变成几十字节的截断文件)
+        assert docx_path.stat().st_size > original_size // 2
+        # 替换生效
+        assert get_xml_text(docx_path, "//w:t") == "hello 世界"
+        # 无残留临时文件
+        assert not docx_path.with_suffix(".docx.tmp").exists()
+
 
 # =====================================================================
 # insert_text_at: 6 case
