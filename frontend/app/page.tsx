@@ -394,6 +394,8 @@ export default function Home() {
         currentSessionId={currentSessionId}
         streamMode={streamMode}
         editMode={editMode}
+        canSwitchMode={!hasActiveConnection()}
+        onEditModeChange={setEditMode}
         onToggleSidebar={() => {
           const nextOpen = !sessionSidebarOpen;
           setSessionSidebarOpen(nextOpen);
@@ -501,34 +503,6 @@ export default function Home() {
           <div ref={chatEndRef} />
           </div>
         </div>
-
-        {/* v3: 模式切换 (仅未连接时可用) */}
-        {!hasActiveConnection() && (
-          <div className="px-4 pt-2 pb-0 flex justify-center">
-            <div className="inline-flex rounded-lg border border-slate-200 dark:border-zinc-700 overflow-hidden">
-              <button
-                onClick={() => setEditMode("fill")}
-                className={`px-4 py-1.5 text-xs font-mono transition-colors ${
-                  editMode === "fill"
-                    ? "bg-indigo-500 text-white"
-                    : "bg-white dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-700"
-                }`}
-              >
-                填充模式
-              </button>
-              <button
-                onClick={() => setEditMode("detail_edit")}
-                className={`px-4 py-1.5 text-xs font-mono transition-colors border-l border-slate-200 dark:border-zinc-700 ${
-                  editMode === "detail_edit"
-                    ? "bg-indigo-500 text-white"
-                    : "bg-white dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-700"
-                }`}
-              >
-                编辑模式
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Input Prompt Box area */}
         <ChatInput

@@ -14,6 +14,8 @@ interface ChatHeaderProps {
   currentSessionId: string | null;
   streamMode: boolean;
   editMode?: "fill" | "detail_edit";  // v3
+  canSwitchMode?: boolean;  // v3: 是否允许切换模式 (未连接时)
+  onEditModeChange?: (mode: "fill" | "detail_edit") => void;  // v3
   onToggleSidebar: () => void;
   onTogglePreview: () => void;
   onToggleWorkspace: () => void;
@@ -36,6 +38,8 @@ export default function ChatHeader({
   currentSessionId,
   streamMode,
   editMode,
+  canSwitchMode,
+  onEditModeChange,
   onToggleSidebar,
   onTogglePreview,
   onToggleWorkspace,
@@ -65,10 +69,30 @@ export default function ChatHeader({
             {docxPath}
           </span>
         )}
-        {editMode === "detail_edit" && (
-          <span className="text-[10px] font-mono px-2 py-0.5 border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded">
-            编辑模式
-          </span>
+        {/* v3: 模式切换 (仅未连接时可用) */}
+        {canSwitchMode && onEditModeChange && (
+          <div className="inline-flex rounded-md border border-slate-200 dark:border-zinc-700 overflow-hidden ml-1">
+            <button
+              onClick={() => onEditModeChange("fill")}
+              className={`px-2.5 py-1 text-[11px] font-mono transition-colors cursor-pointer ${
+                editMode === "fill"
+                  ? "bg-indigo-500 text-white"
+                  : "bg-white dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 hover:bg-slate-50 dark:hover:bg-zinc-700"
+              }`}
+            >
+              填充
+            </button>
+            <button
+              onClick={() => onEditModeChange("detail_edit")}
+              className={`px-2.5 py-1 text-[11px] font-mono transition-colors border-l border-slate-200 dark:border-zinc-700 cursor-pointer ${
+                editMode === "detail_edit"
+                  ? "bg-indigo-500 text-white"
+                  : "bg-white dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 hover:bg-slate-50 dark:hover:bg-zinc-700"
+              }`}
+            >
+              编辑
+            </button>
+          </div>
         )}
       </div>
 

@@ -16,3 +16,6 @@ COMMIT_EDITMSG.tmp
 test_stream.html
 新建 文本文档.txt
 示例.txt
+
+# Agent 上下文文件 (本地, 不入库)
+QWEN.md
