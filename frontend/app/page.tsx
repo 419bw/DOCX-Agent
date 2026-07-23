@@ -301,12 +301,8 @@ export default function Home() {
 
     if (!hasActiveConnection()) {
       isScrolledToBottom.current = true;
-      // v3: 有历史消息 → resume 已有会话; 无历史消息 (如仅上传文件创建的 phantom session) → 新建并传 mode
-      if (currentSessionId && messages.length > 0) {
-        startAgentSession(prompt, docxPath, currentSessionId);
-      } else {
-        startAgentSession(prompt, "", undefined, editMode);
-      }
+      // v3: 统一走 start; 有 currentSessionId (如上传创建的) 则传 session_id 复用
+      startAgentSession(prompt, docxPath, undefined, editMode, currentSessionId || undefined);
       return;
     }
 
@@ -539,15 +535,20 @@ export default function Home() {
           onUpload={async (file: File) => {
             let sessionId = currentSessionId;
             if (!sessionId) {
-              const now = new Date();
-              const pad = (n: number) => n.toString().padStart(2, '0');
-              const formatted = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-              sessionId = `session-${formatted}`;
+              // v3: 先通过 HTTP 创建正规 session (含 mode), 再上传
+              const res = await fetch("/api/sessions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: editMode }),
+              });
+              if (!res.ok) throw new Error(`创建 session 失败: ${res.status}`);
+              const data = await res.json();
+              sessionId = data.session_id;
               setCurrentSessionId(sessionId);
             }
             setIsUploading(true);
             try {
-              await uploadToWorkspace(sessionId, file);
+              await uploadToWorkspace(sessionId!, file);
               void refreshSessions();
             } finally {
               setIsUploading(false);

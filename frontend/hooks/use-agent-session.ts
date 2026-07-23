@@ -267,7 +267,7 @@ export function useAgentSession(opts: {
   }, []);
 
   // === start — 启动/恢复 WS session (原 startAgentSession, 函数体 1:1 搬入) ===
-  const start = useCallback((initialPrompt: string, path: string, resumeSessionId?: string, mode?: "fill" | "detail_edit") => {
+  const start = useCallback((initialPrompt: string, path: string, resumeSessionId?: string, mode?: "fill" | "detail_edit", preCreatedSessionId?: string) => {
     if (wsRef.current) {
       wsRef.current.close();
     }
@@ -307,6 +307,7 @@ export function useAgentSession(opts: {
           docx_path: path,
           stream_mode: streamMode,  // v2 扩展: 新会话初始流式/非流式模式
           mode: sessionMode,  // v3: 工作模式
+          session_id: preCreatedSessionId || undefined,  // v3: 复用已创建的 session
         }));
         if (initialPrompt) {
           setMessages((prev) => [...prev, { role: "user", content: initialPrompt }]);

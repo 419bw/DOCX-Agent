@@ -240,56 +240,7 @@ async def upload_to_workspace(session_id: str, files: List[UploadFile] = File(..
         raise HTTPException(status_code=503, detail="WORKSPACE_UPLOAD_ENABLED=false")
 
     if not _session_exists(session_id):
-        from .guard import validate_session_id
-        import json
-        try:
-            validate_session_id(session_id)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"非法 session_id: {e}")
-        
-        session_dir = guard.WORKSPACE_ROOT / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 写入默认 metadata.json
-        metadata = {
-            "session_id": session_id,
-            "title": "新会话",
-            "docx_path": "",
-            "workflow_state": "style_review",
-            "pending_approval": False,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-        }
-        try:
-            (session_dir / "metadata.json").write_text(
-                json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            # 写入默认 messages.json
-            messages = {
-                "entries": [],
-                "total_input_tokens": 0,
-                "last_prompt_tokens": 0,
-            }
-            (session_dir / "messages.json").write_text(
-                json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            # 写入默认 workflow.json
-            workflow = {
-                "session_id": session_id,
-                "workflow_state": "style_review",
-                "stage_called_tools": {
-                    "style_review": [],
-                    "md_draft": [],
-                    "word_editing": []
-                },
-                "draft_files_written": [],
-                "round_index": 0
-            }
-            (session_dir / "workflow.json").write_text(
-                json.dumps(workflow, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-        except OSError as e:
-            raise HTTPException(status_code=500, detail=f"初始化 Session 失败: {e}")
+        raise HTTPException(status_code=404, detail=f"session {session_id} not found, 请先通过 POST /api/sessions 创建")
 
     workspace = workspace_dir(session_id)  # 自动 mkdir
     uploaded_results = []

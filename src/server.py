@@ -153,6 +153,54 @@ async def api_delete_session(session_id: str):
     return {"status": "ok", "deleted": session_id, "note": "not_found"}
 
 
+class CreateSessionRequest(BaseModel):
+    mode: str = "fill"  # "fill" | "detail_edit"
+
+
+@app.post("/api/sessions", status_code=201)
+async def api_create_session(req: CreateSessionRequest):
+    """创建正规 session (含 mode), 返回 session_id。
+
+    用途: 前端上传文件前先调此接口创建 session, 再上传到该 session 的 workspace。
+    后续 WS start 可传 session_id 复用此 session。
+    """
+    if req.mode not in ("fill", "detail_edit"):
+        raise HTTPException(status_code=400, detail=f"非法 mode: {req.mode}")
+    session_id = f"session-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    session_dir = SESSIONS_ROOT / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    # 写完整 metadata (与 Agent.save_to_disk 格式一致)
+    metadata = {
+        "session_id": session_id,
+        "title": "新会话",
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "docx_path": "",
+        "provider": "",
+        "model": "",
+        "workflow_state": "style_review" if req.mode == "fill" else "detail_edit",
+        "session_complete": False,
+        "pending_approval": False,
+        "mode": req.mode,
+    }
+    (session_dir / "metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8",
+    )
+    (session_dir / "messages.json").write_text(
+        json.dumps({"session_id": session_id, "system_prompt": "", "entries": [],
+                     "total_input_tokens": 0, "last_prompt_tokens": 0},
+                    ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (session_dir / "workflow.json").write_text(
+        json.dumps({"session_id": session_id, "workflow_state": metadata["workflow_state"],
+                     "stage_called_tools": {}, "draft_files_written": [], "round_index": 0,
+                     "selected_tools": [], "doc_structure_cache": ""},
+                    ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return {"session_id": session_id, "mode": req.mode}
+
+
 @app.get("/api/sessions/{session_id}/drafts")
 async def api_list_session_drafts(session_id: str):
     """列出 session 的所有 MD 草稿 (元数据 + 内容). 供前端 md_draft 阶段右栏多文件 tab 用. 只读."""
@@ -527,14 +575,21 @@ async def _start_new_session(init_data: dict, adapter: LLMClientAdapter, model: 
     docx_path = init_data.get("docx_path") or ""
     stream_mode = bool(init_data.get("stream_mode", True))  # 默认流式
     mode = init_data.get("mode", "fill")  # v3: "fill" (三阶段填充) | "detail_edit" (细致编辑)
+    pre_session_id = (init_data.get("session_id") or "").strip()  # v3: 复用已创建的 session
 
     if not user_prompt:
         return None, "参数 prompt 不能为空"
 
-    # v2: 生成 session_id + session_dir
-    session_id = f"session-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    session_dir = SESSIONS_ROOT / session_id
-    session_dir.mkdir(parents=True, exist_ok=True)
+    # v3: 复用已创建的 session (如上传文件时通过 POST /api/sessions 创建的)
+    if pre_session_id:
+        session_id = pre_session_id
+        session_dir = SESSIONS_ROOT / session_id
+        if not session_dir.exists() or not (session_dir / "metadata.json").exists():
+            return None, f"session {session_id} not found"
+    else:
+        session_id = f"session-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        session_dir = SESSIONS_ROOT / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
 
     log_path = create_log_file(session_dir)
     provider = adapter.get_provider()
