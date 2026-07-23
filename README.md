@@ -28,6 +28,22 @@ AI 驱动的 Word 文档编辑 Agent，基于 LLM 工具调用 + 直接 OpenXML 
 | **Markdown 草稿** | 按文档区域生成结构化 Markdown 内容 | `write_markdown_draft`, `read_markdown_draft`, `parse_markdown_draft`, `ls`, `read`, `analyze_image_content` |
 | **Word 写入** | 编译 Markdown 写入 DOCX，diff 验证 | `read_docx_structure`, `write_markdown_draft`, `read_markdown_draft`, `parse_markdown_draft`, `markdown_to_word`, `diff_docx`, `ls`, `read`, `analyze_image_content` |
 
+## 细致编辑模式 (detail_edit)
+
+与三阶段填充模式并列的第二种工作模式，用于对**已完成文档**做精细化编辑。
+
+```
+start(mode="detail_edit") → 工具选用 agent 选工具子集 → 自由编辑循环 → done
+```
+
+- **工具选用 agent**：内部 LLM 调用（阻塞、无 tools），根据用户请求 + 文档结构从 36+ 工具中选出最合适的子集
+- **基础工具（6 个，始终可用）**：`read_docx_structure`, `find_text`, `ls`, `read`, `diff_docx`, `request_more_tools`
+- **选用工具**：写入/修改类原子工具（`replace_text`, `insert_text_at`, `set_text_format` 等），由选用 agent 按需挑选
+- **工具扩充**：编辑 agent 调 `request_more_tools(reason)` → 选用 agent 重新评估 → 只增不减
+- **无审批**：自由编辑循环，LLM 认为完成即结束
+
+前端在输入框上方提供"填充模式 / 编辑模式"切换，仅未连接时可切换。
+
 ## v2 架构：HTTP 控制面 + WS 数据面
 
 后端是 **session 状态的 source of truth**，前端只展示不缓存。

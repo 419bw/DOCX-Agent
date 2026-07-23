@@ -45,6 +45,22 @@ LLM uses only tools permitted for the current stage:
 
 Authoritative source of truth: `*_TOOL_NAMES` sets in `src/prompts.py` and `tool_schemas_for_state()` filtering.
 
+### Detail Edit Mode (detail_edit)
+
+Second workflow mode for fine-grained editing of completed documents. Parallel to the three-stage fill mode.
+
+```
+start(mode="detail_edit") → tool selector agent → free editing loop → done
+```
+
+- **Tool selector** (`src/tool_selector.py`): Internal LLM call (blocking, no tools) that picks a tool subset from the full catalog based on user request + document structure.
+- **Base tools (6, always available)**: `read_docx_structure`, `find_text`, `ls`, `read`, `diff_docx`, `request_more_tools`. Defined in `DETAIL_EDIT_BASE_TOOLS` in `src/prompts.py`.
+- **Selected tools**: Write/modify atomic tools chosen by the selector. Filtered via `tool_schemas_for_detail_edit()` in `src/prompts.py`.
+- **Tool expansion**: Editing agent calls `request_more_tools(reason)` → selector re-evaluates → only-add-never-remove. Handled in `Agent._handle_request_more_tools()` in `src/agent.py`.
+- **No approval**: Free editing loop, ends when LLM produces content without tool calls.
+- **WS protocol**: `start` frame accepts `mode` field; `session_created`/`history` frames include `mode`; new events `tool_selection_start`/`tool_selection_end`.
+- **Persistence**: `mode` in metadata.json, `selected_tools` + `doc_structure_cache` in workflow.json.
+
 ### Core Systems
 
 **Tool Registry** (`src/docx_tools/registry.py`): All 35 tools registered here in two parallel structures (`TOOLS` dict for dispatch, `TOOLS_SCHEMA` list for LLM-facing schemas). Tools grouped into `basic_tools/`, `md_tools/`, and `docx_tools/`.
