@@ -301,7 +301,8 @@ export default function Home() {
 
     if (!hasActiveConnection()) {
       isScrolledToBottom.current = true;
-      if (currentSessionId) {
+      // v3: 有历史消息 → resume 已有会话; 无历史消息 (如仅上传文件创建的 phantom session) → 新建并传 mode
+      if (currentSessionId && messages.length > 0) {
         startAgentSession(prompt, docxPath, currentSessionId);
       } else {
         startAgentSession(prompt, "", undefined, editMode);
