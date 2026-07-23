@@ -785,6 +785,7 @@ class Agent:
                     yield {"type": "tool_start", "name": name, "arguments": args}
                     self._checkpoint()  # Checkpoint 2: tool "running" 状态入库
 
+                    _snapshot_path = None  # v3: detail_edit 写前快照 (所有分支可见)
                     if name not in current_tool_names:
                         result = json.dumps({
                             "status": "error",
@@ -805,6 +806,20 @@ class Agent:
                                 call_args_dict = {}
                             call_args_dict["session_id"] = self.session_id  # ← 关键: 用 Agent 自己的 session_id 覆盖
                             call_args_str = json.dumps(call_args_dict, ensure_ascii=False)
+
+                        # v3: detail_edit 写前快照 (供段落级 diff 高亮)
+                        if self.mode == DETAIL_EDIT:
+                            try:
+                                _sa = json.loads(call_args_str) if isinstance(call_args_str, str) else call_args_str
+                                _dp = _sa.get("docx_path", "")
+                                if _dp:
+                                    _orig = resolve_workspace_path(self.session_id, _dp, must_exist=True, must_be_file=True)
+                                    _snapshot_path = _orig.with_suffix(".docx.snapshot")
+                                    import shutil as _shutil
+                                    _shutil.copy2(_orig, _snapshot_path)
+                            except Exception:
+                                _snapshot_path = None
+
                         try:
                             result = await asyncio.to_thread(call_tool, name, call_args_str)
                         except Exception as e:
@@ -832,7 +847,7 @@ class Agent:
                         except Exception:
                             pass
 
-                    # v3: detail_edit 写入工具成功后推预览 (不含 diff, 只展示文档 + 下载)
+                    # v3: detail_edit 写入工具成功后推预览 (含段落级 diff 高亮)
                     if self.mode == DETAIL_EDIT and name != "request_more_tools":
                         try:
                             _r = json.loads(result)
@@ -841,19 +856,32 @@ class Agent:
                                     self.session_id, _r["output_path"],
                                     must_exist=True, must_be_file=True,
                                 )
+                                _changes = []
+                                _changed_files = []
+                                if _snapshot_path and _snapshot_path.exists():
+                                    _diff = await asyncio.to_thread(build_paragraph_diff, _snapshot_path, _out)
+                                    _changes = _diff.get("paragraph_changes", [])
+                                    _changed_files = _diff.get("changed_files", [])
                                 yield {
                                     "type": "docx_preview_ready",
                                     "preview_path": _r["output_path"],
                                     "input_path": _r.get("docx_path", ""),
                                     "docx_mtime_ms": int(_out.stat().st_mtime * 1000),
-                                    "paragraph_changes": [],
-                                    "changed_files": [],
+                                    "paragraph_changes": _changes,
+                                    "changed_files": _changed_files,
                                     "diagnostics": [],
                                     "action_count": 1,
                                     "support_summary": {"native": 1, "degraded": 0, "rejected": 0},
                                 }
                         except Exception:
                             pass  # 静默, 不影响主流程
+                        finally:
+                            # 清理快照文件
+                            try:
+                                if _snapshot_path and _snapshot_path.exists():
+                                    _snapshot_path.unlink()
+                            except Exception:
+                                pass
 
                     # 追踪 write_markdown_draft 写入的文件路径, 供 wait_approval 读取
                     if name == "write_markdown_draft":
