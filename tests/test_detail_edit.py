@@ -141,8 +141,8 @@ def test_handle_request_more_tools():
     agent._doc_structure_cache = '{"paragraphs": []}'
     llm._blocking_response = '["insert_paragraph_after"]'
 
-    result_str = asyncio.run(agent._handle_request_more_tools(
-        json.dumps({"reason": "需要插入新段落"})
+    result_str = asyncio.run(agent._mode._handle_request_more_tools(
+        agent, json.dumps({"reason": "需要插入新段落"})
     ))
     result = json.loads(result_str)
 
