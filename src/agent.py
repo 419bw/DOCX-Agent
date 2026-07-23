@@ -115,13 +115,18 @@ from prompts import (
     STYLE_REVIEW,
     MD_DRAFT,
     WORD_EDITING,
+    DETAIL_EDIT,
+    DETAIL_EDIT_BASE_TOOLS,
     REVIEW_TOOL_NAMES,
     MD_DRAFT_TOOL_NAMES,
     WORD_EDITING_TOOL_NAMES,
     SYSTEM_PROMPT,
     tool_schemas_for_state,
+    tool_schemas_for_detail_edit,
     state_prompt,
+    detail_edit_prompt,
 )
+from tool_selector import select_tools
 
 
 class Agent:
@@ -140,7 +145,7 @@ class Agent:
     def __init__(self, system_prompt: str, llm_adapter: LLMClientAdapter,
                  msg_mgr: MessageManager, docx_path: str = "", log_path: Optional[Path] = None,
                  session_id: str = "", session_dir: Optional[Path] = None,
-                 stream_mode: bool = True):
+                 stream_mode: bool = True, mode: str = "fill"):
         self.system_prompt = system_prompt
         self.msg_mgr = msg_mgr
         self.llm = llm_adapter
@@ -165,6 +170,11 @@ class Agent:
         # stream_mode 由 server.py 在构造 Agent 时传入(读自 WS start 帧) — 让用户能
         # 在新会话启动前先把 toggle 拨到非流式,新会话直接以非流式开始(避免触发 stall 后再切)。
         self._stream_mode: bool = stream_mode
+        # === v3: 细致编辑模式 ===
+        # mode: "fill" (三阶段填充, 默认) | "detail_edit" (自由编辑 + 工具选用)
+        self.mode: str = mode
+        self.selected_tools: set[str] = set()  # detail_edit 模式的动态工具集
+        self._doc_structure_cache: str = ""  # 首次 read_docx_structure 结果缓存
         # === v2: 持久化相关 ===
         self.session_id = session_id
         self.session_dir = session_dir  # Path("out") / "sessions" / session_id
@@ -204,12 +214,16 @@ class Agent:
             system_prompt=system_prompt, llm_adapter=llm_adapter,
             msg_mgr=msg_mgr, docx_path=docx_path, log_path=log_path,
             session_id=metadata["session_id"], session_dir=session_dir,
+            mode=metadata.get("mode", "fill"),  # v3: 恢复模式
         )
         agent.workflow_state = workflow["workflow_state"]
         agent.stage_called_tools = {k: set(v) for k, v in workflow["stage_called_tools"].items()}
         agent.draft_files_written = list(workflow["draft_files_written"])
         agent._round_index = workflow["round_index"]
         agent._pending_approval = metadata.get("pending_approval", False)  # v2: 恢复"是否在等审批"标志
+        # v3: 恢复细致编辑模式状态
+        agent.selected_tools = set(workflow.get("selected_tools", []))
+        agent._doc_structure_cache = workflow.get("doc_structure_cache", "")
         return agent
 
     # ─── 日志 ────────────────────────────────────────────
@@ -349,6 +363,60 @@ class Agent:
             ),
         }
 
+    # ─── v3: detail_edit 工具扩充 ─────────────────────────
+
+    async def _handle_request_more_tools(self, args_str: str) -> str:
+        """处理 request_more_tools 工具调用: 触发工具选用 agent 重新选工具。
+
+        不走 call_tool, 由 agent 内部拦截处理。
+        只增不减: 新选的工具合并到现有集合, 不移除已有工具。
+        """
+        try:
+            args = json.loads(args_str) if isinstance(args_str, str) else dict(args_str)
+        except (json.JSONDecodeError, TypeError):
+            args = {}
+        reason = args.get("reason", "未说明原因")
+
+        self._append_log("request_more_tools", {"reason": reason})
+
+        # 提取用户原始请求
+        user_prompt = ""
+        for entry in self.msg_mgr._entries:
+            if entry.get("role") == "user":
+                user_prompt = entry.get("content", "")
+                break
+
+        # 调用工具选用 agent (带当前工具集 + 原因)
+        try:
+            new_selected = await asyncio.to_thread(
+                select_tools,
+                self.llm,
+                user_prompt,
+                self._doc_structure_cache or "{}",
+                current_tools=self.selected_tools,
+                reason=reason,
+            )
+            old_tools = set(self.selected_tools)
+            self.selected_tools = set(new_selected)  # select_tools 内部已做只增不减合并
+            added = sorted(self.selected_tools - old_tools)
+        except Exception as e:
+            self._append_log("工具扩充失败", {"error": str(e)})
+            added = []
+
+        self._append_log("工具扩充完成", {
+            "reason": reason,
+            "added": added,
+            "total": sorted(self.selected_tools),
+        })
+        self._checkpoint()
+
+        return json.dumps({
+            "status": "ok",
+            "message": f"工具集已更新。新增工具: {added if added else '无（当前工具集已足够）'}",
+            "added_tools": added,
+            "total_tools": sorted(self.selected_tools),
+        }, ensure_ascii=False)
+
     async def step(self):
         """
         异步生成器：每 yield 一个事件，WS 立即发给前端。
@@ -384,25 +452,72 @@ class Agent:
             yield {"type": "done", "content": ""}
             return
 
+        # === v3: detail_edit 模式 — 首次进入时工具选用 ===
+        if self.mode == DETAIL_EDIT and not self.selected_tools:
+            yield {"type": "tool_selection_start"}
+            self._append_log("detail_edit 工具选用开始", {"docx_path": self.docx_path})
+
+            # 1. 程序化调 read_docx_structure 拿文档结构 (注入 session_id)
+            doc_structure = "{}"
+            if self.docx_path:
+                try:
+                    rs_args = json.dumps({
+                        "session_id": self.session_id,
+                        "docx_path": self.docx_path,
+                    }, ensure_ascii=False)
+                    doc_structure = await asyncio.to_thread(call_tool, "read_docx_structure", rs_args)
+                except Exception as e:
+                    self._append_log("read_docx_structure 失败", {"error": str(e)})
+                    doc_structure = json.dumps({"error": str(e)}, ensure_ascii=False)
+            self._doc_structure_cache = doc_structure
+
+            # 2. 提取用户原始请求 (messages 中第一条 user 消息)
+            user_prompt = ""
+            for entry in self.msg_mgr._entries:
+                if entry.get("role") == "user":
+                    user_prompt = entry.get("content", "")
+                    break
+
+            # 3. 工具选用 LLM 调用
+            try:
+                selected = await asyncio.to_thread(
+                    select_tools, self.llm, user_prompt, doc_structure,
+                )
+                self.selected_tools = set(selected)
+            except Exception as e:
+                self._append_log("工具选用失败, 降级为基础工具集", {"error": str(e)})
+                self.selected_tools = set(DETAIL_EDIT_BASE_TOOLS)
+
+            self._append_log("detail_edit 工具选用完成", {"selected_tools": sorted(self.selected_tools)})
+            yield {"type": "tool_selection_end", "selected_tools": sorted(self.selected_tools)}
+            self._checkpoint()
+
         while True:
             self._round_index += 1
-            current_tool_schemas = tool_schemas_for_state(self.workflow_state)
+            # v3: mode-aware 工具 schema + 提示词
+            if self.mode == DETAIL_EDIT:
+                current_tool_schemas = tool_schemas_for_detail_edit(self.selected_tools)
+                state_prompt_text = detail_edit_prompt(current_tool_schemas)
+                effective_state = DETAIL_EDIT
+            else:
+                current_tool_schemas = tool_schemas_for_state(self.workflow_state)
+                state_prompt_text = state_prompt(self.workflow_state, current_tool_schemas)
+                effective_state = self.workflow_state
             current_tool_names = {schema["function"]["name"] for schema in current_tool_schemas}
 
-            state_prompt_text = state_prompt(self.workflow_state, current_tool_schemas)
             request_messages = self.msg_mgr.build_request_messages(state_prompt_text)
 
             yield {
                 "type": "round_start",
                 "round": self._round_index,
-                "workflow_state": self.workflow_state,
+                "workflow_state": effective_state,
                 "allowed_tools": list(current_tool_names),
                 "token_count": self.msg_mgr.last_prompt_tokens,
             }
             self._checkpoint()  # Checkpoint 1: round_start 消息已发, 落盘
 
             self._append_log(f"第 {self._round_index} 轮模型请求", {
-                "workflow_state": self.workflow_state,
+                "workflow_state": effective_state,
                 "message_count": len(request_messages),
                 "tool_names": sorted(list(current_tool_names)),
             })
@@ -674,8 +789,11 @@ class Agent:
                         result = json.dumps({
                             "status": "error",
                             "tool": name,
-                            "message": f"当前状态 ({self.workflow_state}) 不允许调用该工具"
+                            "message": f"当前状态 ({effective_state}) 不允许调用该工具"
                         }, ensure_ascii=False)
+                    elif name == "request_more_tools":
+                        # v3: detail_edit 模式 — 工具扩充请求, 不走 call_tool, 内部处理
+                        result = await self._handle_request_more_tools(args)
                     else:
                         # v2: 避坑 1 — 反射调用前隐式注入 session_id
                         # 重要: 即便 LLM 在 args 里瞎传了 session_id, 我们也**覆盖**为 self.session_id (安全)
@@ -727,17 +845,27 @@ class Agent:
 
             content_stripped = (accumulated_content or "").strip()
             if len(content_stripped) < 5:
-                if self.workflow_state == STYLE_REVIEW:
+                if self.mode == DETAIL_EDIT:
+                    guidance = "请基于当前可用工具直接执行编辑操作，或输出变更摘要。"
+                elif self.workflow_state == STYLE_REVIEW:
                     guidance = "你当前处于样式审核阶段，请基于已读取的文档信息直接输出样式分析结果（列出 sample_id 与对应格式特征），不要尝试查看其他目录或文件。"
                 elif self.workflow_state == MD_DRAFT:
                     guidance = "请直接输出 Markdown 草稿内容或给出下一步草稿计划。"
                 else:
                     guidance = "请基于当前可用工具直接执行操作或给出分析结果。"
 
-                self._append_log("空响应自动引导", {"workflow_state": self.workflow_state, "content_length": len(content_stripped)})
+                self._append_log("空响应自动引导", {"workflow_state": effective_state, "content_length": len(content_stripped)})
                 self.msg_mgr.append_user(guidance)
                 yield {"type": "content", "delta": f"\n\n*[系统引导] {guidance}*"}
                 continue
+
+            # === v3: detail_edit 模式 — 无审批, 直接 done ===
+            if self.mode == DETAIL_EDIT:
+                self._append_log("细致编辑流完成", {"state": DETAIL_EDIT})
+                self.workflow_state = "done"
+                self._checkpoint()
+                yield {"type": "done", "content": accumulated_content}
+                return
 
             # 状态机转换检查 (Step C: 评估逻辑已迁到 state_machine.WorkflowTransitions)
             if self.workflow_state == STYLE_REVIEW:

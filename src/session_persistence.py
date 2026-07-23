@@ -120,6 +120,8 @@ class SessionPersistence:
             "session_complete": False,
             # v2: resume 时供 server.py 推 isWaitingApproval
             "pending_approval": a._pending_approval,
+            # v3: 工作模式 (fill / detail_edit)
+            "mode": a.mode,
         }
 
     def messages_dict(self) -> dict:
@@ -140,4 +142,7 @@ class SessionPersistence:
             "stage_called_tools": {k: sorted(v) for k, v in a.stage_called_tools.items()},
             "draft_files_written": list(a.draft_files_written),
             "round_index": a._round_index,
+            # v3: 细致编辑模式状态
+            "selected_tools": sorted(a.selected_tools),
+            "doc_structure_cache": a._doc_structure_cache,
         }

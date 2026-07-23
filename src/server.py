@@ -325,6 +325,7 @@ async def ws_agent(websocket: WebSocket):
                 "docx_path": agent.docx_path,
                 "approvalPhase": None,
                 "isWaitingApproval": False,
+                "mode": agent.mode,  # v3
             })
 
         elif init_type == "resume":
@@ -346,6 +347,7 @@ async def ws_agent(websocket: WebSocket):
                 "messages": _to_ui_messages(agent.msg_mgr._entries),
                 "approvalPhase": agent.workflow_state if agent.workflow_state in ("style_review", "md_draft", "word_editing") else None,
                 "isWaitingApproval": agent._pending_approval,
+                "mode": agent.mode,  # v3
             })
 
         else:
@@ -524,6 +526,7 @@ async def _start_new_session(init_data: dict, adapter: LLMClientAdapter, model: 
     user_prompt = (init_data.get("prompt") or "").strip()
     docx_path = init_data.get("docx_path") or ""
     stream_mode = bool(init_data.get("stream_mode", True))  # 默认流式
+    mode = init_data.get("mode", "fill")  # v3: "fill" (三阶段填充) | "detail_edit" (细致编辑)
 
     if not user_prompt:
         return None, "参数 prompt 不能为空"
@@ -542,6 +545,7 @@ async def _start_new_session(init_data: dict, adapter: LLMClientAdapter, model: 
         "tool_count": len(TOOLS_SCHEMA),
         "interface": "websocket_api",
         "docx_path": docx_path,
+        "mode": mode,  # v3: 工作模式
     }
     # Step 6: 通用读取 adapter 状态(替代旧 if-provider 分支)
     # 任何 provider 只要 thinking_type/reasoning_effort 有效就记录, 不再需要按名分支
@@ -566,6 +570,7 @@ async def _start_new_session(init_data: dict, adapter: LLMClientAdapter, model: 
         session_id=session_id,  # v2
         session_dir=session_dir,  # v2
         stream_mode=stream_mode,  # v2 扩展: 新会话初始流式/非流式模式
+        mode=mode,  # v3: 工作模式
     )
 
     # v2 fix: Agent 创建后**立即**同步写盘, 让 /api/sessions 立即能看到这个 session
