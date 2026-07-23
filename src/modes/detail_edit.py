@@ -194,26 +194,19 @@ class DetailEditMode(BaseMode):
 
             # 写入工具成功后推预览 (含段落级 diff 高亮)
             if name != "request_more_tools":
-                # 从 LLM 原始参数取相对路径 (不用工具返回的绝对路径, 保持沙箱校验)
-                _rel_out = None
-                try:
-                    _a = json.loads(args) if isinstance(args, str) else args
-                    _rel_out = _a.get("output_path")
-                except Exception:
-                    pass
-                async for event in self._emit_preview(agent, name, result, snapshot_path, rel_output_path=_rel_out):
+                async for event in self._emit_preview(agent, name, result, snapshot_path):
                     yield event
 
     # ─── 预览 (含 diff) ──────────────────────────────────
 
-    async def _emit_preview(self, agent, name, result, snapshot_path, rel_output_path=None):
+    async def _emit_preview(self, agent, name, result, snapshot_path):
         import asyncio
 
         try:
             _r = json.loads(result)
-            if _r.get("status") == "ok" and rel_output_path:
+            if _r.get("status") == "ok" and _r.get("output_path"):
                 _out = resolve_workspace_path(
-                    agent.session_id, rel_output_path,
+                    agent.session_id, _r["output_path"],
                     must_exist=True, must_be_file=True,
                 )
                 _changes = []
@@ -224,7 +217,7 @@ class DetailEditMode(BaseMode):
                     _changed_files = _diff.get("changed_files", [])
                 yield {
                     "type": "docx_preview_ready",
-                    "preview_path": rel_output_path,
+                    "preview_path": _r["output_path"],
                     "input_path": _r.get("docx_path", ""),
                     "docx_mtime_ms": int(_out.stat().st_mtime * 1000),
                     "paragraph_changes": _changes,
