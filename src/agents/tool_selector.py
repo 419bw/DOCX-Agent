@@ -20,7 +20,7 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from docx_tools import TOOLS_SCHEMA, TOOLS
 from prompts import DETAIL_EDIT_BASE_TOOLS, TOOL_SELECTION_SYSTEM_PROMPT

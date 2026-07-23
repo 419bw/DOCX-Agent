@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import json
 from unittest.mock import MagicMock
 
-from tool_selector import build_tool_catalog, _parse_tool_names, select_tools
+from agents.tool_selector import build_tool_catalog, _parse_tool_names, select_tools
 from prompts import DETAIL_EDIT_BASE_TOOLS
 from docx_tools import TOOLS
 

@@ -126,7 +126,7 @@ from prompts import (
     state_prompt,
     detail_edit_prompt,
 )
-from tool_selector import select_tools
+from agents.tool_selector import select_tools
 
 
 class Agent:
