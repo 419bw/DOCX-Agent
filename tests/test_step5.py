@@ -114,9 +114,9 @@ def test_start_agent_session_accepts_resume_param():
     修复: 改读 hook 文件 + 改 regex 匹配 useCallback 定义.
     """
     content = read(APP_HOOK)
-    # 匹配: const start = useCallback((initialPrompt: string, path: string, resumeSessionId?: string) => {
+    # 匹配: const start = useCallback((initialPrompt: string, path: string, resumeSessionId?: string, ...) => {
     m = re.search(
-        r"const\s+start\s*=\s*useCallback\(\s*\(\s*initialPrompt:\s*string\s*,\s*path:\s*string\s*,\s*resumeSessionId\??:\s*string\s*\)",
+        r"const\s+start\s*=\s*useCallback\(\s*\(\s*initialPrompt:\s*string\s*,\s*path:\s*string\s*,\s*resumeSessionId\??:\s*string",
         content,
     )
     assert m, "hook 里 start = useCallback(...) 签名应接受 resumeSessionId?: string 第三参数"

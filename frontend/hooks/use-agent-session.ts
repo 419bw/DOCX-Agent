@@ -141,6 +141,11 @@ export function useAgentSession(opts: {
   // === v3: 实时 DOCX 预览状态 (markdown_to_word 完成后由后端推 docx_preview_ready) ===
   const [docxPreviewInfo, setDocxPreviewInfo] = useState<DocxPreviewReady | null>(null);
 
+  // === v3: 细致编辑模式 ===
+  const [editMode, setEditMode] = useState<"fill" | "detail_edit">("fill");
+  const [isSelectingTools, setIsSelectingTools] = useState<boolean>(false);
+  const [selectedTools, setSelectedTools] = useState<string[]>([]);
+
   // === 实时流清理 ===
   const clearLiveStream = useCallback(() => {
     liveReasoningRef.current = "";
@@ -262,7 +267,7 @@ export function useAgentSession(opts: {
   }, []);
 
   // === start — 启动/恢复 WS session (原 startAgentSession, 函数体 1:1 搬入) ===
-  const start = useCallback((initialPrompt: string, path: string, resumeSessionId?: string) => {
+  const start = useCallback((initialPrompt: string, path: string, resumeSessionId?: string, mode?: "fill" | "detail_edit") => {
     if (wsRef.current) {
       wsRef.current.close();
     }
@@ -293,11 +298,15 @@ export function useAgentSession(opts: {
       } else {
         // v2: start 新 session (后端生成 session_id)
         setIsGenerating(true);
+        const sessionMode = mode || "fill";
+        setEditMode(sessionMode);
+        setSelectedTools([]);
         socket.send(JSON.stringify({
           type: "start",
           prompt: initialPrompt,
           docx_path: path,
           stream_mode: streamMode,  // v2 扩展: 新会话初始流式/非流式模式
+          mode: sessionMode,  // v3: 工作模式
         }));
         if (initialPrompt) {
           setMessages((prev) => [...prev, { role: "user", content: initialPrompt }]);
@@ -318,6 +327,7 @@ export function useAgentSession(opts: {
             approvalPhase: data.approvalPhase ?? null,
             isWaitingApproval: data.isWaitingApproval ?? false,
           });
+          if (data.mode) setEditMode(data.mode);  // v3
           // 异步刷新 sidebar 列表 (拉新 session 进来)
           onRefreshSessions();
           break;
@@ -335,6 +345,7 @@ export function useAgentSession(opts: {
           setDocxPath(data.docxPath || "");
           setApprovalPhase(data.approvalPhase ?? null);
           setIsWaitingApproval(data.isWaitingApproval ?? false);
+          if (data.mode) setEditMode(data.mode);  // v3
           // 状态恢复后, 不需要再等后端推内容 (history 已经是终态)
           setIsGenerating(false);
           onRefreshSessions();
@@ -498,6 +509,17 @@ export function useAgentSession(opts: {
           break;
         }
 
+        // v3: 细致编辑模式 — 工具选用事件
+        case "tool_selection_start": {
+          setIsSelectingTools(true);
+          break;
+        }
+        case "tool_selection_end": {
+          setIsSelectingTools(false);
+          setSelectedTools(data.selected_tools || []);
+          break;
+        }
+
         case "paused": {
           // v3: 切历史后后端 yield 的首个事件, 表示"已恢复状态, 等用户消息"
           // 作用:
@@ -656,6 +678,10 @@ export function useAgentSession(opts: {
     currentSessionInfo,
     streamMode,
     docxPreviewInfo,  // v3: 实时 DOCX 预览 (markdown_to_word 完成后由后端推)
+    editMode,  // v3: 工作模式 (fill / detail_edit)
+    setEditMode,  // v3: 模式切换
+    isSelectingTools,  // v3: 工具选用进行中
+    selectedTools,  // v3: 当前选用的工具列表
     // setters (供 page handlers 调用)
     setCurrentSessionId,
     // actions

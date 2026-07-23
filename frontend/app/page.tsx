@@ -81,6 +81,10 @@ export default function Home() {
     setCurrentSessionId,
     streamMode,
     docxPreviewInfo,  // v3: 实时 DOCX 预览事件
+    editMode,  // v3: 工作模式
+    setEditMode,  // v3: 模式切换
+    isSelectingTools,  // v3: 工具选用中
+    selectedTools,  // v3: 选用工具列表
     start: startAgentSession,
     stop: stopAgentSession,
     sendContinue,
@@ -300,7 +304,7 @@ export default function Home() {
       if (currentSessionId) {
         startAgentSession(prompt, docxPath, currentSessionId);
       } else {
-        startAgentSession(prompt, "");
+        startAgentSession(prompt, "", undefined, editMode);
       }
       return;
     }
@@ -314,7 +318,7 @@ export default function Home() {
       if (currentSessionId) {
         startAgentSession(prompt, docxPath, currentSessionId);
       } else {
-        startAgentSession(prompt, "");
+        startAgentSession(prompt, "", undefined, editMode);
       }
     }
   };
@@ -389,6 +393,7 @@ export default function Home() {
         workspaceFileCount={workspaceFiles.length}
         currentSessionId={currentSessionId}
         streamMode={streamMode}
+        editMode={editMode}
         onToggleSidebar={() => {
           const nextOpen = !sessionSidebarOpen;
           setSessionSidebarOpen(nextOpen);
@@ -458,9 +463,30 @@ export default function Home() {
           {/* === 实时流式 AnimatedLivePanel === */}
           <AnimatedLivePanel reasoning={liveReasoning} content={liveContent} time={thinkTime} />
 
+          {/* v3: 细致编辑模式 — 工具选用状态 */}
+          {isSelectingTools && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-indigo-50/80 dark:bg-indigo-900/20 border border-indigo-200/50 dark:border-indigo-800/50 rounded-xl">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+              <span className="text-xs font-mono text-indigo-600 dark:text-indigo-400">正在分析所需工具...</span>
+            </div>
+          )}
+          {!isSelectingTools && selectedTools.length > 0 && editMode === "detail_edit" && (
+            <div className="px-4 py-3 bg-slate-50/80 dark:bg-zinc-800/50 border border-slate-200/50 dark:border-zinc-700/50 rounded-xl space-y-2">
+              <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">当前工具集</span>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedTools.map((t) => (
+                  <span key={t} className="px-2 py-0.5 text-[10px] font-mono bg-white dark:bg-zinc-700 border border-slate-200 dark:border-zinc-600 rounded-md text-slate-600 dark:text-zinc-300">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 旧的文档流内指示器已移除: 替换为 footer 上方悬浮胶囊(见下) */}
 
-          {/* Inline Phase Checkpoint (Waiting Approval) */}
+          {/* Inline Phase Checkpoint (Waiting Approval) — detail_edit 模式无审批 */}
+          {editMode !== "detail_edit" && (
           <ApprovalCheckpoint
             isWaitingApproval={isWaitingApproval}
             approvalPhase={approvalPhase}
@@ -470,10 +496,39 @@ export default function Home() {
             onApprove={handleApproveAction}
             onReject={handleRejectAction}
           />
+          )}
 
           <div ref={chatEndRef} />
           </div>
         </div>
+
+        {/* v3: 模式切换 (仅未连接时可用) */}
+        {!hasActiveConnection() && (
+          <div className="px-4 pt-2 pb-0 flex justify-center">
+            <div className="inline-flex rounded-lg border border-slate-200 dark:border-zinc-700 overflow-hidden">
+              <button
+                onClick={() => setEditMode("fill")}
+                className={`px-4 py-1.5 text-xs font-mono transition-colors ${
+                  editMode === "fill"
+                    ? "bg-indigo-500 text-white"
+                    : "bg-white dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-700"
+                }`}
+              >
+                填充模式
+              </button>
+              <button
+                onClick={() => setEditMode("detail_edit")}
+                className={`px-4 py-1.5 text-xs font-mono transition-colors border-l border-slate-200 dark:border-zinc-700 ${
+                  editMode === "detail_edit"
+                    ? "bg-indigo-500 text-white"
+                    : "bg-white dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-700"
+                }`}
+              >
+                编辑模式
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Input Prompt Box area */}
         <ChatInput

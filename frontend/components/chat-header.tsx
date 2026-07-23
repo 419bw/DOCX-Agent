@@ -13,6 +13,7 @@ interface ChatHeaderProps {
   workspaceFileCount: number;
   currentSessionId: string | null;
   streamMode: boolean;
+  editMode?: "fill" | "detail_edit";  // v3
   onToggleSidebar: () => void;
   onTogglePreview: () => void;
   onToggleWorkspace: () => void;
@@ -34,6 +35,7 @@ export default function ChatHeader({
   workspaceFileCount,
   currentSessionId,
   streamMode,
+  editMode,
   onToggleSidebar,
   onTogglePreview,
   onToggleWorkspace,
@@ -61,6 +63,11 @@ export default function ChatHeader({
         {docxPath && (
           <span className="text-[10px] font-mono px-2 py-0.5 border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 rounded truncate max-w-xs md:max-w-md">
             {docxPath}
+          </span>
+        )}
+        {editMode === "detail_edit" && (
+          <span className="text-[10px] font-mono px-2 py-0.5 border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded">
+            编辑模式
           </span>
         )}
       </div>
