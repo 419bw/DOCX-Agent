@@ -1,6 +1,7 @@
 from lxml import etree
 
 from .common import (
+    CUSTOM_FORMAT_PROPERTIES,
     NS,
     W,
     apply_format_policy_to_paragraph,
@@ -30,10 +31,7 @@ def insert_text_in_table_cell(
     append: bool = True,
     newline_mode: str = "paragraphs",
     format_policy: str = "preserve",
-    color: str | None = None,
-    bold: bool | None = None,
-    font_size_half_points: int | None = None,
-    font_size_pt: float | None = None,
+    **custom,
 ) -> str:
     """向表格单元格插入文本。表格、行、单元格索引都从 1 开始计数。"""
     input_path, output_path_resolved = resolve_docx_io(session_id, docx_path, output_path)
@@ -76,10 +74,7 @@ def insert_text_in_table_cell(
         apply_format_policy_to_run(
             new_run,
             format_policy,
-            color=color,
-            bold=bold,
-            font_size_half_points=font_size_half_points,
-            font_size_pt=font_size_pt,
+            **custom,
         )
         mode = "append_new_run"
     else:
@@ -91,10 +86,7 @@ def insert_text_in_table_cell(
             apply_format_policy_to_run(
                 run,
                 format_policy,
-                color=color,
-                bold=bold,
-                font_size_half_points=font_size_half_points,
-                font_size_pt=font_size_pt,
+                **custom,
             )
         mode = "create_run_in_cell_paragraph"
 
@@ -106,10 +98,7 @@ def insert_text_in_table_cell(
             apply_format_policy_to_paragraph(
                 current,
                 format_policy,
-                color=color,
-                bold=bold,
-                font_size_half_points=font_size_half_points,
-                font_size_pt=font_size_pt,
+                **custom,
             )
 
     write_document_xml(str(input_path), str(output_path_resolved), root)
@@ -158,10 +147,7 @@ tools_schema = {
                     "description": "插入后文本的格式策略：preserve 保留原格式，clear 清除直接字符格式，body 转正文格式，custom 使用显式格式；默认 preserve",
                     "enum": ["preserve", "clear", "body", "custom"],
                 },
-                "color": {"type": "string", "description": "custom 策略下的 RGB 颜色，如 FF0000 或 #FF0000"},
-                "bold": {"type": "boolean", "description": "custom 策略下是否加粗"},
-                "font_size_half_points": {"type": "integer", "description": "custom/body 策略下字号，单位为半磅，如 24 表示 12 磅"},
-                "font_size_pt": {"type": "number", "description": "custom/body 策略下字号，单位为磅，如 12"},
+                **CUSTOM_FORMAT_PROPERTIES,
             },
             "required": ["docx_path", "output_path", "table_index", "row_index", "cell_index", "insert_text"],
         },

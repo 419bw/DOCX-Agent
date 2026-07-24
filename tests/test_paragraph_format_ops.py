@@ -15,7 +15,7 @@
 API 提示 (从源码核对, 跟原计划有偏差):
   - set_paragraph_indent 用 paragraph_index (1-based) + 三个 *twips* 参数,
     不是 *chars* 参数. 计划写错, 按实际 API 测.
-  - set_text_format 只支持 color / bold / font_size (半磅或磅), 不支持 italic / font_name.
+  - set_text_format 支持 color / bold / italic / underline / font_name / font_size (半磅或磅).
   - 三个工具的 JSON result 都不含 lxml 元素, 没有 Bug #1 那种序列化问题.
 """
 import json
@@ -225,6 +225,117 @@ class TestSetTextFormat:
                 namespaces={"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"},
             )
             assert b_elems == [], f"'clear' 策略下目标 run 不应有 <w:b/>, 实际 {len(b_elems)} 个"
+
+    def test_underline_true_adds_w_u(self, tmp_root, session_id):
+        """underline=True: 目标 run 出现 <w:u w:val="single"/>."""
+        _build_minimal_docx(_ws(tmp_root, session_id) / "in.docx",
+                            ["hello world"])
+        out_path = _ws(tmp_root, session_id) / "out.docx"
+
+        result = json.loads(set_text_format(
+            session_id, "in.docx", "out.docx",
+            target_text="hello", underline=True
+        ))
+
+        assert result["status"] == "ok"
+        target_runs = get_xml_elements(out_path, "//w:r[w:t[contains(text(), 'hello')]]")
+        assert len(target_runs) >= 1
+        u_elems = target_runs[0].xpath(
+            ".//w:u/@w:val",
+            namespaces={"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"},
+        )
+        assert "single" in u_elems, f"目标 run 应含 <w:u w:val='single'/>, 实际 {u_elems}"
+
+    def test_italic_true_adds_w_i_and_iCs(self, tmp_root, session_id):
+        """italic=True: 目标 run 同时出现 <w:i/> 和 <w:iCs/>."""
+        _build_minimal_docx(_ws(tmp_root, session_id) / "in.docx",
+                            ["hello world"])
+        out_path = _ws(tmp_root, session_id) / "out.docx"
+
+        result = json.loads(set_text_format(
+            session_id, "in.docx", "out.docx",
+            target_text="world", italic=True
+        ))
+
+        assert result["status"] == "ok"
+        target_runs = get_xml_elements(out_path, "//w:r[w:t[contains(text(), 'world')]]")
+        assert len(target_runs) >= 1
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        assert target_runs[0].xpath(".//w:i", namespaces=ns), "目标 run 应含 <w:i/>"
+        assert target_runs[0].xpath(".//w:iCs", namespaces=ns), "目标 run 应含 <w:iCs/>"
+
+    def test_font_name_sets_rfonts(self, tmp_root, session_id):
+        """font_name='楷体': 目标 run 的 rFonts ascii/hAnsi/eastAsia 全设为楷体."""
+        _build_minimal_docx(_ws(tmp_root, session_id) / "in.docx",
+                            ["hello world"])
+        out_path = _ws(tmp_root, session_id) / "out.docx"
+
+        result = json.loads(set_text_format(
+            session_id, "in.docx", "out.docx",
+            target_text="hello", font_name="楷体"
+        ))
+
+        assert result["status"] == "ok"
+        target_runs = get_xml_elements(out_path, "//w:r[w:t[contains(text(), 'hello')]]")
+        assert len(target_runs) >= 1
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        rfonts = target_runs[0].xpath(".//w:rFonts", namespaces=ns)
+        assert len(rfonts) >= 1, "目标 run 应含 <w:rFonts>"
+        rf = rfonts[0]
+        w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        assert rf.get(f"{{{w}}}ascii") == "楷体"
+        assert rf.get(f"{{{w}}}hAnsi") == "楷体"
+        assert rf.get(f"{{{w}}}eastAsia") == "楷体"
+
+    def test_combo_bold_italic_underline_color(self, tmp_root, session_id):
+        """组合格式: bold + italic + underline + color 全部生效."""
+        _build_minimal_docx(_ws(tmp_root, session_id) / "in.docx",
+                            ["hello world"])
+        out_path = _ws(tmp_root, session_id) / "out.docx"
+
+        result = json.loads(set_text_format(
+            session_id, "in.docx", "out.docx",
+            target_text="hello",
+            bold=True, italic=True, underline=True, color="FF0000"
+        ))
+
+        assert result["status"] == "ok"
+        target_runs = get_xml_elements(out_path, "//w:r[w:t[contains(text(), 'hello')]]")
+        assert len(target_runs) >= 1
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        r = target_runs[0]
+        assert r.xpath(".//w:b", namespaces=ns), "应含 <w:b/>"
+        assert r.xpath(".//w:i", namespaces=ns), "应含 <w:i/>"
+        assert r.xpath(".//w:iCs", namespaces=ns), "应含 <w:iCs/>"
+        u_val = r.xpath(".//w:u/@w:val", namespaces=ns)
+        assert "single" in u_val, "应含 <w:u w:val='single'/>"
+        color_val = r.xpath(".//w:color/@w:val", namespaces=ns)
+        assert "FF0000" in color_val, "应含 <w:color w:val='FF0000'/>"
+
+    def test_underline_false_removes_w_u(self, tmp_root, session_id):
+        """underline=False: 已有下划线的 run 移除 <w:u>."""
+        body_xml = (
+            '    <w:p>'
+            '<w:r><w:rPr><w:u w:val="single"/></w:rPr>'
+            '<w:t xml:space="preserve">hello world</w:t></w:r>'
+            '</w:p>'
+        )
+        _build_docx_with_custom_body(
+            _ws(tmp_root, session_id) / "in.docx", body_xml
+        )
+        out_path = _ws(tmp_root, session_id) / "out.docx"
+
+        result = json.loads(set_text_format(
+            session_id, "in.docx", "out.docx",
+            target_text="hello", underline=False
+        ))
+
+        assert result["status"] == "ok"
+        target_runs = get_xml_elements(out_path, "//w:r[w:t[contains(text(), 'hello')]]")
+        if target_runs:
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            u_elems = target_runs[0].xpath(".//w:u", namespaces=ns)
+            assert u_elems == [], f"underline=False 后不应有 <w:u/>, 实际 {len(u_elems)} 个"
 
 
 # =====================================================================

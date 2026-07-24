@@ -1,6 +1,7 @@
 import copy
 
 from .common import (
+    CUSTOM_FORMAT_PROPERTIES,
     apply_format_policy_to_paragraph,
     append_run_to_paragraph,
     cell_paragraphs,
@@ -30,10 +31,7 @@ def replace_table_cell_text(
     new_text: str,
     newline_mode: str = "paragraphs",
     format_policy: str = "preserve",
-    color: str | None = None,
-    bold: bool | None = None,
-    font_size_half_points: int | None = None,
-    font_size_pt: float | None = None,
+    **custom,
 ) -> str:
     """用坐标定位表格单元格，清空原内容后写入新文本。"""
     input_path, output_path_resolved = resolve_docx_io(session_id, docx_path, output_path)
@@ -55,14 +53,7 @@ def replace_table_cell_text(
 
     if first_text:
         append_run_to_paragraph(paragraph, first_text, source_run)
-        apply_format_policy_to_paragraph(
-            paragraph,
-            format_policy,
-            color=color,
-            bold=bold,
-            font_size_half_points=font_size_half_points,
-            font_size_pt=font_size_pt,
-        )
+        apply_format_policy_to_paragraph(paragraph, format_policy, **custom)
 
     source_paragraph = style_paragraph if style_paragraph is not None else paragraph
     inserted_paragraph_count = insert_paragraphs_after(paragraph, extra_paragraphs, style_paragraph=source_paragraph)
@@ -70,14 +61,7 @@ def replace_table_cell_text(
     for _ in range(inserted_paragraph_count):
         current = current.getnext()
         if current is not None:
-            apply_format_policy_to_paragraph(
-                current,
-                format_policy,
-                color=color,
-                bold=bold,
-                font_size_half_points=font_size_half_points,
-                font_size_pt=font_size_pt,
-            )
+            apply_format_policy_to_paragraph(current, format_policy, **custom)
 
     after_text = cell_text(cell)
     write_document_xml(str(input_path), str(output_path_resolved), root)
@@ -124,10 +108,7 @@ tools_schema = {
                     "description": "写入文本的格式策略：preserve 保留原格式，clear 清除直接字符格式，body 转正文格式，custom 使用显式格式；默认 preserve",
                     "enum": ["preserve", "clear", "body", "custom"],
                 },
-                "color": {"type": "string", "description": "custom 策略下的 RGB 颜色，如 FF0000 或 #FF0000"},
-                "bold": {"type": "boolean", "description": "custom 策略下是否加粗"},
-                "font_size_half_points": {"type": "integer", "description": "custom/body 策略下字号，单位为半磅，如 24 表示 12 磅"},
-                "font_size_pt": {"type": "number", "description": "custom/body 策略下字号，单位为磅，如 12"},
+                **CUSTOM_FORMAT_PROPERTIES,
             },
             "required": ["docx_path", "output_path", "table_index", "row_index", "cell_index", "new_text"],
         },

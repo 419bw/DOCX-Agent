@@ -239,6 +239,7 @@ def _build_run_xml(
     *,
     bold: bool = False,
     italic: bool = False,
+    underline: bool = False,
     font: str | None = None,
     size: int | None = None,
 ) -> str:
@@ -252,6 +253,8 @@ def _build_run_xml(
         rpr_parts.append("<w:b/>")
     if italic:
         rpr_parts.append("<w:i/>")
+    if underline:
+        rpr_parts.append('<w:u w:val="single"/>')
     if font:
         f = _escape_xml(font)
         rpr_parts.append(

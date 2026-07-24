@@ -1,4 +1,5 @@
 from .common import (
+    CUSTOM_FORMAT_PROPERTIES,
     apply_format_policy_to_paragraph,
     apply_format_policy_to_run,
     json_result,
@@ -23,10 +24,7 @@ def replace_text(
     occurrence: int = 1,
     newline_mode: str = "paragraphs",
     format_policy: str = "preserve",
-    color: str | None = None,
-    bold: bool | None = None,
-    font_size_half_points: int | None = None,
-    font_size_pt: float | None = None,
+    **custom,
 ) -> str:
     """按逻辑段落文本替换内容，支持跨 run 命中。"""
     input_path, output_path_resolved = resolve_docx_io(session_id, docx_path, output_path)
@@ -52,10 +50,7 @@ def replace_text(
                 apply_format_policy_to_run(
                     change["run"],
                     format_policy,
-                    color=color,
-                    bold=bold,
-                    font_size_half_points=font_size_half_points,
-                    font_size_pt=font_size_pt,
+                    **custom,
                 )
             inserted_paragraph_count = 0
             if extra_paragraphs:
@@ -64,10 +59,7 @@ def replace_text(
                     apply_format_policy_to_paragraph(
                         inserted,
                         format_policy,
-                        color=color,
-                        bold=bold,
-                        font_size_half_points=font_size_half_points,
-                        font_size_pt=font_size_pt,
+                        **custom,
                     )
             after_text = paragraph_text(paragraph)
             change_for_result = {key: value for key, value in change.items() if key != "run"}
@@ -151,10 +143,7 @@ tools_schema = {
                     "description": "替换后文本的格式策略：preserve 保留原格式，clear 清除直接字符格式，body 转正文格式，custom 使用显式格式；默认 preserve",
                     "enum": ["preserve", "clear", "body", "custom"],
                 },
-                "color": {"type": "string", "description": "custom 策略下的 RGB 颜色，如 FF0000 或 #FF0000"},
-                "bold": {"type": "boolean", "description": "custom 策略下是否加粗"},
-                "font_size_half_points": {"type": "integer", "description": "custom/body 策略下字号，单位为半磅，如 24 表示 12 磅"},
-                "font_size_pt": {"type": "number", "description": "custom/body 策略下字号，单位为磅，如 12"},
+                **CUSTOM_FORMAT_PROPERTIES,
             },
             "required": ["docx_path", "output_path", "old_text", "new_text"],
         },

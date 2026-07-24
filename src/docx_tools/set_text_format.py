@@ -1,4 +1,5 @@
 from .common import (
+    CUSTOM_FORMAT_PROPERTIES,
     apply_format_policy_to_run,
     cleanup_empty_text_runs,
     isolate_text_range_in_paragraph,
@@ -19,10 +20,7 @@ def set_text_format(
     target_text: str,
     occurrence: int = 1,
     format_policy: str = "custom",
-    color: str | None = None,
-    bold: bool | None = None,
-    font_size_half_points: int | None = None,
-    font_size_pt: float | None = None,
+    **custom,
 ) -> str:
     """对指定文本应用字符格式，必要时会拆分 run 以只影响目标文本。"""
     input_path, output_path_resolved = resolve_docx_io(session_id, docx_path, output_path)
@@ -47,10 +45,7 @@ def set_text_format(
                 apply_format_policy_to_run(
                     run,
                     format_policy,
-                    color=color,
-                    bold=bold,
-                    font_size_half_points=font_size_half_points,
-                    font_size_pt=font_size_pt,
+                    **custom,
                 )
             cleanup_empty_text_runs(paragraph)
             after_text = paragraph_text(paragraph)
@@ -98,10 +93,7 @@ tools_schema = {
                     "description": "格式策略：clear 清除直接格式，body 转正文格式，custom 使用显式格式；默认 custom",
                     "enum": ["clear", "body", "custom"],
                 },
-                "color": {"type": "string", "description": "custom 策略下的 RGB 颜色，如 FF0000 或 #FF0000"},
-                "bold": {"type": "boolean", "description": "custom 策略下是否加粗"},
-                "font_size_half_points": {"type": "integer", "description": "字号，单位为半磅，如 24 表示 12 磅"},
-                "font_size_pt": {"type": "number", "description": "字号，单位为磅，如 12"},
+                **CUSTOM_FORMAT_PROPERTIES,
             },
             "required": ["docx_path", "output_path", "target_text"],
         },

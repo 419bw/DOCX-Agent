@@ -1,6 +1,7 @@
 import copy
 
 from .common import (
+    CUSTOM_FORMAT_PROPERTIES,
     apply_format_policy_to_paragraph,
     append_run_to_paragraph,
     cell_paragraphs,
@@ -31,10 +32,7 @@ def insert_table_row_after(
     copy_from: str = "target",
     newline_mode: str = "paragraphs",
     format_policy: str = "preserve",
-    color: str | None = None,
-    bold: bool | None = None,
-    font_size_half_points: int | None = None,
-    font_size_pt: float | None = None,
+    **custom,
 ) -> str:
     """在指定表格行后插入一整行，复制邻近行结构后写入各单元格文本。"""
     input_path, output_path_resolved = resolve_docx_io(session_id, docx_path, output_path)
@@ -53,10 +51,7 @@ def insert_table_row_after(
         cell_texts,
         newline_mode=newline_mode,
         format_policy=format_policy,
-        color=color,
-        bold=bold,
-        font_size_half_points=font_size_half_points,
-        font_size_pt=font_size_pt,
+        **custom,
     )
     target_row.addnext(new_row)
     write_document_xml(str(input_path), str(output_path_resolved), root)
@@ -103,10 +98,7 @@ def _write_row_texts(
     texts,
     newline_mode: str,
     format_policy: str,
-    color: str | None,
-    bold: bool | None,
-    font_size_half_points: int | None,
-    font_size_pt: float | None,
+    **custom,
 ):
     cells = row_cells(row)
     for index, cell in enumerate(cells):
@@ -118,14 +110,7 @@ def _write_row_texts(
         first_text, extra_paragraphs = split_text_for_paragraphs(text, newline_mode)
         if first_text:
             run = append_run_to_paragraph(paragraph, first_text, source_run)
-            apply_format_policy_to_paragraph(
-                paragraph,
-                format_policy,
-                color=color,
-                bold=bold,
-                font_size_half_points=font_size_half_points,
-                font_size_pt=font_size_pt,
-            )
+            apply_format_policy_to_paragraph(paragraph, format_policy, **custom)
         if extra_paragraphs:
             source_paragraph = style_paragraph if style_paragraph is not None else paragraph
             insert_paragraphs_after(paragraph, extra_paragraphs, style_paragraph=source_paragraph)
@@ -133,14 +118,7 @@ def _write_row_texts(
             for _ in extra_paragraphs:
                 current = current.getnext()
                 if current is not None:
-                    apply_format_policy_to_paragraph(
-                        current,
-                        format_policy,
-                        color=color,
-                        bold=bold,
-                        font_size_half_points=font_size_half_points,
-                        font_size_pt=font_size_pt,
-                    )
+                    apply_format_policy_to_paragraph(current, format_policy, **custom)
 
 
 tools_schema = {
@@ -175,10 +153,7 @@ tools_schema = {
                     "description": "写入文本的格式策略：preserve 保留复制行原格式，clear 清除直接字符格式，body 转正文格式，custom 使用显式格式；默认 preserve",
                     "enum": ["preserve", "clear", "body", "custom"],
                 },
-                "color": {"type": "string", "description": "custom 策略下的 RGB 颜色，如 FF0000 或 #FF0000"},
-                "bold": {"type": "boolean", "description": "custom 策略下是否加粗"},
-                "font_size_half_points": {"type": "integer", "description": "custom/body 策略下字号，单位为半磅，如 24 表示 12 磅"},
-                "font_size_pt": {"type": "number", "description": "custom/body 策略下字号，单位为磅，如 12"},
+                **CUSTOM_FORMAT_PROPERTIES,
             },
             "required": ["docx_path", "output_path", "table_index", "row_index", "cell_texts"],
         },

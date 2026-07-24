@@ -17,6 +17,16 @@ NS = {"w": W_NS}
 W = f"{{{W_NS}}}"
 XML = f"{{{XML_NS}}}"
 
+CUSTOM_FORMAT_PROPERTIES = {
+    "color": {"type": "string", "description": "custom 策略下的 RGB 颜色，如 FF0000 或 #FF0000"},
+    "bold": {"type": "boolean", "description": "custom 策略下是否加粗"},
+    "italic": {"type": "boolean", "description": "custom 策略下是否斜体"},
+    "underline": {"type": "boolean", "description": "custom 策略下是否添加下划线"},
+    "font_name": {"type": "string", "description": "custom 策略下的字体名，如 楷体、Times New Roman"},
+    "font_size_half_points": {"type": "integer", "description": "custom/body 策略下字号，单位为半磅，如 24 表示 12 磅"},
+    "font_size_pt": {"type": "number", "description": "custom/body 策略下字号，单位为磅，如 12"},
+}
+
 
 def json_result(data) -> str:
     def _clean(val):
@@ -672,6 +682,9 @@ def apply_custom_run_format(
     run,
     color: str | None = None,
     bold: bool | None = None,
+    italic: bool | None = None,
+    underline: bool | None = None,
+    font_name: str | None = None,
     font_size_half_points: int | None = None,
     font_size_pt: float | None = None,
 ):
@@ -680,6 +693,12 @@ def apply_custom_run_format(
         set_run_color(run, color)
     if bold is not None:
         set_run_bold(run, bold)
+    if italic is not None:
+        set_run_italic(run, italic)
+    if underline is not None:
+        set_run_underline(run, underline)
+    if font_name is not None:
+        set_run_font_name(run, font_name)
     if font_size_half_points is None and font_size_pt is not None:
         font_size_half_points = int(round(font_size_pt * 2))
     if font_size_half_points is not None:
@@ -719,7 +738,7 @@ def apply_sample_paragraph_format(paragraph, style_sample: dict):
 def apply_sample_format_to_run(run, style_sample: dict):
     fmt = style_sample.get("format") or {}
     rpr = _ensure_rpr(run)
-    for tag in ("b", "bCs", "i", "iCs", "color", "highlight", "sz", "szCs", "rFonts"):
+    for tag in ("b", "bCs", "i", "iCs", "color", "highlight", "sz", "szCs", "rFonts", "u"):
         _remove_rpr_child(rpr, tag)
 
     fonts = etree.Element(f"{W}rFonts")
@@ -741,6 +760,10 @@ def apply_sample_format_to_run(run, style_sample: dict):
     if fmt.get("italic"):
         rpr.append(etree.Element(f"{W}i"))
         rpr.append(etree.Element(f"{W}iCs"))
+    if fmt.get("underline"):
+        elem = etree.Element(f"{W}u")
+        elem.set(f"{W}val", fmt["underline"] if isinstance(fmt["underline"], str) else "single")
+        rpr.append(elem)
     if fmt.get("color"):
         elem = etree.Element(f"{W}color")
         elem.set(f"{W}val", fmt["color"])
@@ -776,6 +799,34 @@ def set_run_bold(run, enabled: bool):
     if enabled:
         rpr.append(etree.Element(f"{W}b"))
         rpr.append(etree.Element(f"{W}bCs"))
+
+
+def set_run_italic(run, enabled: bool):
+    rpr = _ensure_rpr(run)
+    _remove_rpr_child(rpr, "i")
+    _remove_rpr_child(rpr, "iCs")
+    if enabled:
+        rpr.append(etree.Element(f"{W}i"))
+        rpr.append(etree.Element(f"{W}iCs"))
+
+
+def set_run_underline(run, enabled: bool):
+    rpr = _ensure_rpr(run)
+    _remove_rpr_child(rpr, "u")
+    if enabled:
+        elem = etree.Element(f"{W}u")
+        elem.set(f"{W}val", "single")
+        rpr.append(elem)
+
+
+def set_run_font_name(run, font_name: str):
+    rpr = _ensure_rpr(run)
+    rfonts = rpr.find(f"{W}rFonts")
+    if rfonts is None:
+        rfonts = etree.Element(f"{W}rFonts")
+        rpr.insert(0, rfonts)
+    for attr in ("ascii", "hAnsi", "eastAsia"):
+        rfonts.set(f"{W}{attr}", font_name)
 
 
 def set_run_font_size(run, half_points: int):
