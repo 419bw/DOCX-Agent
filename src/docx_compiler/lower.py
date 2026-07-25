@@ -297,42 +297,56 @@ def _table_column_count(block: MarkdownBlock) -> int | None:
 
 
 def _parse_inline_runs(text: str) -> list[RunIR]:
-    """解析最小 Markdown 加粗语法；未闭合的 ** 按普通文本处理。"""
+    """解析最小 Markdown 内联语法：**bold** 和 `code`；未闭合标记按普通文本处理。"""
     runs = []
     cursor = 0
     while cursor < len(text):
-        start = text.find("**", cursor)
-        if start == -1:
+        bt = text.find("`", cursor)
+        bold = text.find("**", cursor)
+
+        # 取最早出现的标记；同位置时 ` 优先（代码内 ** 是字面量）
+        if bt == -1 and bold == -1:
             _append_text_runs(runs, text[cursor:], bold=False)
             break
-        if start > cursor:
-            _append_text_runs(runs, text[cursor:start], bold=False)
-        end = text.find("**", start + 2)
-        if end == -1:
-            _append_text_runs(runs, text[start:], bold=False)
-            break
-        _append_text_runs(runs, text[start + 2 : end], bold=True)
-        cursor = end + 2
+
+        if bt != -1 and (bold == -1 or bt <= bold):
+            if bt > cursor:
+                _append_text_runs(runs, text[cursor:bt], bold=False)
+            end = text.find("`", bt + 1)
+            if end == -1:
+                _append_text_runs(runs, text[bt:], bold=False)
+                break
+            _append_text_runs(runs, text[bt + 1 : end], bold=False, code=True)
+            cursor = end + 1
+        else:
+            if bold > cursor:
+                _append_text_runs(runs, text[cursor:bold], bold=False)
+            end = text.find("**", bold + 2)
+            if end == -1:
+                _append_text_runs(runs, text[bold:], bold=False)
+                break
+            _append_text_runs(runs, text[bold + 2 : end], bold=True)
+            cursor = end + 2
     return runs
 
 
-def _append_text_runs(runs: list[RunIR], text: str, bold: bool) -> None:
+def _append_text_runs(runs: list[RunIR], text: str, bold: bool, code: bool = False) -> None:
     token = []
     for char in text:
         if char == "\t":
             if token:
-                runs.append(RunIR.text_run("".join(token), bold=bold))
+                runs.append(RunIR.text_run("".join(token), bold=bold, code=code))
                 token = []
             runs.append(RunIR.tab())
         elif char == "\n":
             if token:
-                runs.append(RunIR.text_run("".join(token), bold=bold))
+                runs.append(RunIR.text_run("".join(token), bold=bold, code=code))
                 token = []
             runs.append(RunIR.line_break())
         else:
             token.append(char)
     if token:
-        runs.append(RunIR.text_run("".join(token), bold=bold))
+        runs.append(RunIR.text_run("".join(token), bold=bold, code=code))
 
 
 def _diagnostic(block: MarkdownBlock, level: str, code: str, message: str, support: SupportStatus) -> Diagnostic:

@@ -96,6 +96,8 @@ def render_paragraph(paragraph_ir: ParagraphIR, style_samples: dict[str, dict] |
             set_run_bold(run, True)
         if run_ir.italic:
             _set_run_italic(run, True)
+        if run_ir.code:
+            _set_run_code_font(run)
 
     _apply_paragraph_indent(paragraph, paragraph_ir)
     optimize_paragraph(paragraph)
@@ -287,6 +289,21 @@ def _set_run_italic(run, enabled: bool) -> None:
     if enabled:
         rpr.append(etree.Element(f"{W}i"))
         rpr.append(etree.Element(f"{W}iCs"))
+
+
+def _set_run_code_font(run) -> None:
+    rpr = run.find(f"{W}rPr")
+    if rpr is None:
+        rpr = etree.Element(f"{W}rPr")
+        run.insert(0, rpr)
+    for child in list(rpr):
+        if child.tag == f"{W}rFonts":
+            rpr.remove(child)
+    fonts = etree.Element(f"{W}rFonts")
+    fonts.set(f"{W}ascii", "Consolas")
+    fonts.set(f"{W}hAnsi", "Consolas")
+    fonts.set(f"{W}eastAsia", "Consolas")
+    rpr.insert(0, fonts)
 
 
 def _apply_code_format(paragraph) -> None:

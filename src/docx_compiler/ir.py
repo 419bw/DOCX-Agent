@@ -14,11 +14,12 @@ class RunIR:
     text: str = ""
     bold: bool = False
     italic: bool = False
+    code: bool = False
     kind: RunKind = "text"
 
     @classmethod
-    def text_run(cls, text: str, bold: bool = False, italic: bool = False) -> "RunIR":
-        return cls(text=text, bold=bold, italic=italic, kind="text")
+    def text_run(cls, text: str, bold: bool = False, italic: bool = False, code: bool = False) -> "RunIR":
+        return cls(text=text, bold=bold, italic=italic, code=code, kind="text")
 
     @classmethod
     def tab(cls) -> "RunIR":
