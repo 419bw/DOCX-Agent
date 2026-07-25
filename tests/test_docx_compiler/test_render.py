@@ -182,6 +182,116 @@ def test_render_code_block_uses_consolas_font():
         assert "Consolas" in fonts, f"代码块 run 应用 Consolas 字体, 实际 {fonts}"
 
 
+def test_render_code_block_shading():
+    """代码块段落应有浅灰底色 w:shd fill=F2F2F2."""
+    cb_ir = CodeBlockIR(code="line1\nline2")
+    paragraphs = render_code_block(cb_ir)
+    for p in paragraphs:
+        shd = p.xpath("./w:pPr/w:shd", namespaces={"w": W[1:-1]})
+        assert len(shd) == 1, "代码段落应有 w:shd"
+        assert shd[0].get(f"{W}fill") == "F2F2F2"
+        assert shd[0].get(f"{W}val") == "clear"
+
+
+def test_render_code_block_border_distribution():
+    """多行代码: 首段有 top, 末段有 bottom, 所有段有 left+right."""
+    cb_ir = CodeBlockIR(code="a\nb\nc")
+    paragraphs = render_code_block(cb_ir)
+    assert len(paragraphs) == 3
+    ns = {"w": W[1:-1]}
+
+    # 首段: top + left + right, 无 bottom
+    first_bdr = paragraphs[0].xpath("./w:pPr/w:pBdr", namespaces=ns)
+    assert len(first_bdr) == 1
+    assert len(first_bdr[0].xpath("./w:top", namespaces=ns)) == 1
+    assert len(first_bdr[0].xpath("./w:bottom", namespaces=ns)) == 0
+    assert len(first_bdr[0].xpath("./w:left", namespaces=ns)) == 1
+    assert len(first_bdr[0].xpath("./w:right", namespaces=ns)) == 1
+
+    # 中间段: 只有 left + right
+    mid_bdr = paragraphs[1].xpath("./w:pPr/w:pBdr", namespaces=ns)
+    assert len(mid_bdr) == 1
+    assert len(mid_bdr[0].xpath("./w:top", namespaces=ns)) == 0
+    assert len(mid_bdr[0].xpath("./w:bottom", namespaces=ns)) == 0
+    assert len(mid_bdr[0].xpath("./w:left", namespaces=ns)) == 1
+    assert len(mid_bdr[0].xpath("./w:right", namespaces=ns)) == 1
+
+    # 末段: left + bottom + right, 无 top
+    last_bdr = paragraphs[2].xpath("./w:pPr/w:pBdr", namespaces=ns)
+    assert len(last_bdr) == 1
+    assert len(last_bdr[0].xpath("./w:top", namespaces=ns)) == 0
+    assert len(last_bdr[0].xpath("./w:bottom", namespaces=ns)) == 1
+    assert len(last_bdr[0].xpath("./w:left", namespaces=ns)) == 1
+    assert len(last_bdr[0].xpath("./w:right", namespaces=ns)) == 1
+
+
+def test_render_code_block_single_line_border():
+    """单行代码: 同一段落有 top + bottom."""
+    cb_ir = CodeBlockIR(code="print(1)")
+    paragraphs = render_code_block(cb_ir)
+    assert len(paragraphs) == 1
+    ns = {"w": W[1:-1]}
+    bdr = paragraphs[0].xpath("./w:pPr/w:pBdr", namespaces=ns)
+    assert len(bdr) == 1
+    assert len(bdr[0].xpath("./w:top", namespaces=ns)) == 1
+    assert len(bdr[0].xpath("./w:bottom", namespaces=ns)) == 1
+
+
+def test_render_code_block_spacing():
+    """代码段落应有 w:spacing after=0 line=240."""
+    cb_ir = CodeBlockIR(code="a\nb")
+    paragraphs = render_code_block(cb_ir)
+    ns = {"w": W[1:-1]}
+    for p in paragraphs:
+        spacing = p.xpath("./w:pPr/w:spacing", namespaces=ns)
+        assert len(spacing) == 1, "代码段落应有 w:spacing"
+        assert spacing[0].get(f"{W}after") == "0"
+        assert spacing[0].get(f"{W}line") == "240"
+        assert spacing[0].get(f"{W}lineRule") == "auto"
+
+
+def test_render_code_block_language_label():
+    """有 language 时, 首段为语言标签: 灰色小字 + 底色 + top 边框."""
+    cb_ir = CodeBlockIR(code="print(1)", language="python")
+    paragraphs = render_code_block(cb_ir)
+    assert len(paragraphs) == 2  # 标签 + 1 行代码
+    ns = {"w": W[1:-1]}
+
+    label = paragraphs[0]
+    # 标签文字
+    texts = label.xpath(".//w:t/text()", namespaces=ns)
+    assert "python" in "".join(texts)
+    # 灰色小字
+    sz = label.xpath(".//w:rPr/w:sz/@w:val", namespaces=ns)
+    assert "18" in sz, f"标签应 9pt (sz=18), 实际 {sz}"
+    color = label.xpath(".//w:rPr/w:color/@w:val", namespaces=ns)
+    assert "A6A6A6" in color, f"标签应灰色 A6A6A6, 实际 {color}"
+    # 底色
+    shd = label.xpath("./w:pPr/w:shd", namespaces=ns)
+    assert len(shd) == 1
+    # 边框: top + left + right, 无 bottom
+    bdr = label.xpath("./w:pPr/w:pBdr", namespaces=ns)
+    assert len(bdr) == 1
+    assert len(bdr[0].xpath("./w:top", namespaces=ns)) == 1
+    assert len(bdr[0].xpath("./w:bottom", namespaces=ns)) == 0
+
+    # 代码段: 无 top (标签已有), 有 bottom
+    code_bdr = paragraphs[1].xpath("./w:pPr/w:pBdr", namespaces=ns)
+    assert len(code_bdr) == 1
+    assert len(code_bdr[0].xpath("./w:top", namespaces=ns)) == 0
+    assert len(code_bdr[0].xpath("./w:bottom", namespaces=ns)) == 1
+
+
+def test_render_code_block_no_language_no_label():
+    """无 language 时不生成标签段落."""
+    cb_ir = CodeBlockIR(code="print(1)")
+    paragraphs = render_code_block(cb_ir)
+    assert len(paragraphs) == 1  # 只有代码行
+    ns = {"w": W[1:-1]}
+    texts = paragraphs[0].xpath(".//w:t/text()", namespaces=ns)
+    assert "python" not in "".join(texts)
+
+
 # =====================================================================
 # 9. List item indent
 # =====================================================================

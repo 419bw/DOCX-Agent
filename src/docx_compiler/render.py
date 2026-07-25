@@ -112,8 +112,17 @@ def render_code_block(code_ir: CodeBlockIR, style_samples: dict[str, dict] | Non
     if not lines:
         lines = [""]
 
+    total = len(lines)
     paragraphs = []
-    for line in lines:
+
+    if code_ir.language:
+        paragraphs.append(
+            _code_label_paragraph(code_ir.language, total == 0, style_samples, code_ir)
+        )
+
+    for i, line in enumerate(lines):
+        is_first = i == 0
+        is_last = i == total - 1
         paragraph_ir = ParagraphIR(
             runs=_code_line_runs(line),
             style_sample_id=code_ir.style_sample_id,
@@ -124,6 +133,13 @@ def render_code_block(code_ir: CodeBlockIR, style_samples: dict[str, dict] | Non
         )
         paragraph = render_paragraph(paragraph_ir, style_samples=style_samples)
         _apply_code_format(paragraph)
+        _apply_code_shading(paragraph)
+        _apply_code_border(
+            paragraph,
+            top=is_first and not code_ir.language,
+            bottom=is_last,
+        )
+        _apply_code_spacing(paragraph)
         paragraphs.append(paragraph)
     return paragraphs
 
@@ -320,6 +336,132 @@ def _apply_code_format(paragraph) -> None:
         fonts.set(f"{W}hAnsi", "Consolas")
         fonts.set(f"{W}eastAsia", "Consolas")
         rpr.insert(0, fonts)
+
+
+# ---------- 代码块段落级格式 helper ----------
+
+_PPR_CHILD_ORDER = [
+    f"{W}pStyle",
+    f"{W}pBdr",
+    f"{W}shd",
+    f"{W}spacing",
+    f"{W}ind",
+    f"{W}jc",
+    f"{W}rPr",
+]
+
+
+def _insert_ppr_child(ppr, elem) -> None:
+    """按 OOXML schema 顺序插入 pPr 子元素；同 tag 已存在则替换。"""
+    tag = elem.tag
+    for child in list(ppr):
+        if child.tag == tag:
+            ppr.remove(child)
+            break
+    try:
+        elem_order = _PPR_CHILD_ORDER.index(tag)
+    except ValueError:
+        ppr.append(elem)
+        return
+    for i, child in enumerate(ppr):
+        if child.tag not in _PPR_CHILD_ORDER:
+            continue
+        if elem_order < _PPR_CHILD_ORDER.index(child.tag):
+            ppr.insert(i, elem)
+            return
+    ppr.append(elem)
+
+
+def _ensure_ppr(paragraph):
+    ppr = paragraph.find(f"{W}pPr")
+    if ppr is None:
+        ppr = etree.Element(f"{W}pPr")
+        paragraph.insert(0, ppr)
+    return ppr
+
+
+def _apply_code_shading(paragraph) -> None:
+    ppr = _ensure_ppr(paragraph)
+    shd = etree.Element(f"{W}shd")
+    shd.set(f"{W}val", "clear")
+    shd.set(f"{W}color", "auto")
+    shd.set(f"{W}fill", "F2F2F2")
+    _insert_ppr_child(ppr, shd)
+
+
+def _apply_code_border(paragraph, top: bool = False, bottom: bool = False) -> None:
+    ppr = _ensure_ppr(paragraph)
+    pbdr = etree.Element(f"{W}pBdr")
+    if top:
+        el = etree.SubElement(pbdr, f"{W}top")
+        el.set(f"{W}val", "single")
+        el.set(f"{W}sz", "4")
+        el.set(f"{W}space", "1")
+        el.set(f"{W}color", "auto")
+    el = etree.SubElement(pbdr, f"{W}left")
+    el.set(f"{W}val", "single")
+    el.set(f"{W}sz", "4")
+    el.set(f"{W}space", "4")
+    el.set(f"{W}color", "auto")
+    if bottom:
+        el = etree.SubElement(pbdr, f"{W}bottom")
+        el.set(f"{W}val", "single")
+        el.set(f"{W}sz", "4")
+        el.set(f"{W}space", "1")
+        el.set(f"{W}color", "auto")
+    el = etree.SubElement(pbdr, f"{W}right")
+    el.set(f"{W}val", "single")
+    el.set(f"{W}sz", "4")
+    el.set(f"{W}space", "4")
+    el.set(f"{W}color", "auto")
+    _insert_ppr_child(ppr, pbdr)
+
+
+def _apply_code_spacing(paragraph) -> None:
+    ppr = _ensure_ppr(paragraph)
+    spacing = etree.Element(f"{W}spacing")
+    spacing.set(f"{W}after", "0")
+    spacing.set(f"{W}line", "240")
+    spacing.set(f"{W}lineRule", "auto")
+    _insert_ppr_child(ppr, spacing)
+
+
+def _code_label_paragraph(
+    language: str,
+    is_single: bool,
+    style_samples: dict[str, dict] | None,
+    code_ir: CodeBlockIR,
+):
+    paragraph_ir = ParagraphIR(
+        runs=[RunIR.text_run(language)],
+        style_sample_id=code_ir.style_sample_id,
+        block_id=code_ir.block_id,
+        block_type="code_block",
+        line_start=code_ir.line_start,
+        line_end=code_ir.line_end,
+    )
+    paragraph = render_paragraph(paragraph_ir, style_samples=style_samples)
+    for run in paragraph.xpath("./w:r", namespaces=NS):
+        rpr = run.find(f"{W}rPr")
+        if rpr is None:
+            rpr = etree.Element(f"{W}rPr")
+            run.insert(0, rpr)
+        for child in list(rpr):
+            if child.tag in {f"{W}sz", f"{W}szCs", f"{W}color"}:
+                rpr.remove(child)
+        sz = etree.Element(f"{W}sz")
+        sz.set(f"{W}val", "18")
+        rpr.append(sz)
+        sz_cs = etree.Element(f"{W}szCs")
+        sz_cs.set(f"{W}val", "18")
+        rpr.append(sz_cs)
+        color = etree.Element(f"{W}color")
+        color.set(f"{W}val", "A6A6A6")
+        rpr.append(color)
+    _apply_code_shading(paragraph)
+    _apply_code_border(paragraph, top=True, bottom=is_single)
+    _apply_code_spacing(paragraph)
+    return paragraph
 
 
 def _append_default_borders(tbl_pr) -> None:

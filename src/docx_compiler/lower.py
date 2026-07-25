@@ -67,7 +67,7 @@ def diagnostics_for_blocks(blocks: list[MarkdownBlock]) -> list[Diagnostic]:
         if block.block_type == "list_item":
             diagnostics.append(_diagnostic(block, "warning", "LIST_ITEM_DEGRADED", "列表项按文本 marker 和段落缩进写入，暂未生成 Word 原生 numbering.xml。", support))
         elif block.block_type == "code_block":
-            diagnostics.append(_diagnostic(block, "warning", "CODE_BLOCK_DEGRADED", "代码块将按等宽段落写入，暂未做语法高亮。", support))
+            diagnostics.append(_diagnostic(block, "warning", "CODE_BLOCK_DEGRADED", "代码块按等宽段落写入（含底色、边框、语言标签），暂未做语法高亮。", support))
         elif block.block_type == "formula_block":
             diagnostics.append(_diagnostic(block, "warning", "FORMULA_RENDERED_AS_TEXT", "公式已识别，但当前按文本写入，暂未转换为 Word 原生 OMML。", support))
         elif block.block_type == "html_block":
