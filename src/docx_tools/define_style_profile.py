@@ -49,12 +49,26 @@ def define_style_profile(
             "fixed_roles": list(FIXED_ROLES),
         })
 
+    if "body" not in styles:
+        return json_result({
+            "status": "error",
+            "message": "必须定义 body 角色。其余角色未定义时自动继承 body 格式。",
+            "fixed_roles": list(FIXED_ROLES),
+        })
+
     invalid_roles = sorted(set(styles) - set(FIXED_ROLES))
     if invalid_roles:
         return json_result({
             "status": "error",
             "message": f"非标准角色 {invalid_roles}。合法角色: {list(FIXED_ROLES)}",
             "fixed_roles": list(FIXED_ROLES),
+        })
+
+    non_dict_roles = sorted(r for r, v in styles.items() if not isinstance(v, dict))
+    if non_dict_roles:
+        return json_result({
+            "status": "error",
+            "message": f"角色 {non_dict_roles} 的值必须是 dict（含 format / paragraph_format），当前类型不合法。",
         })
 
     errors = _validate_styles(styles)

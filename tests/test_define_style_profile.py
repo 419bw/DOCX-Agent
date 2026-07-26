@@ -75,9 +75,26 @@ class TestDefineStyleProfile:
         assert result["status"] == "error"
         assert "不能为空" in result["message"]
 
+    def test_missing_body_returns_error(self, tmp_root, session_id):
+        """有角色但缺 body → status=error."""
+        result = json.loads(define_style_profile(session_id, {
+            "title": {"format": {}, "paragraph_format": {}},
+        }))
+        assert result["status"] == "error"
+        assert "body" in result["message"]
+
+    def test_non_dict_value_returns_error(self, tmp_root, session_id):
+        """角色值不是 dict → status=error."""
+        result = json.loads(define_style_profile(session_id, {
+            "body": "宋体 小四",
+        }))
+        assert result["status"] == "error"
+        assert "dict" in result["message"]
+
     def test_invalid_role_returns_error(self, tmp_root, session_id):
         """非标准角色 → status=error, 列出合法角色."""
         result = json.loads(define_style_profile(session_id, {
+            "body": {"format": {}, "paragraph_format": {}},
             "nonexistent_role": {"format": {}, "paragraph_format": {}},
         }))
         assert result["status"] == "error"

@@ -106,9 +106,9 @@ def analyze_docx_style_samples(
         "style_profile_path": "",
         "style_samples": style_samples,
         "review_instructions": [
-            "这些 sample_id 只是候选格式样本，不是最终样式决策。",
-            "请让用户确认哪些 sample_id 对应正文、章节标题、表格字段名、表格填写值、占位提示等角色。",
-            "大规模写入前，优先按用户确认的 sample_id 仿写格式，避免把正文写成标题或加粗格式。",
+            "这些是模板文档中提取的格式样本，仅供参考试用。",
+            "请仔细阅读每个 sample 的 format / paragraph_format / context / examples 字段，理解模板的排版风格。",
+            "然后调用 define_style_profile，由你自己决定每个角色的格式参数（参考模板风格，保持整体一致）。",
         ],
     }
     profile_path = _resolve_profile_path(docx_path_resolved, output_profile_path, session_id)
