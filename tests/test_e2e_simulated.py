@@ -206,7 +206,7 @@ def test_fill_mode_full_e2e(tmp_root, session_id):
 
     # 预设 LLM 响应:
     # R1: 调 analyze_docx_style_samples
-    # R2: 调 bind_styles_to_roles
+    # R2: 调 define_style_profile
     # R3: 纯文本 (样式分析结果) → 触发 wait_approval
     # --- 用户 approve ---
     # R4: 调 write_markdown_draft
@@ -216,10 +216,9 @@ def test_fill_mode_full_e2e(tmp_root, session_id):
     # R7: 纯文本 (写入完成) → done
     scripts = [
         _make_tool_chunk("analyze_docx_style_samples", {"docx_path": "template.docx"}),
-        _make_tool_chunk("bind_styles_to_roles", {
-            "bindings": {
-                "title": "sample_1", "section_heading": "sample_1",
-                "body": "sample_1", "table_cell": "sample_1", "placeholder": "sample_1",
+        _make_tool_chunk("define_style_profile", {
+            "styles": {
+                "body": {"format": {"font_east_asia": "宋体"}, "paragraph_format": {}},
             }
         }),
         _make_text_chunk("样式分析完成。建议：标题用 sample_1，正文用 sample_1。请确认。"),
@@ -287,5 +286,5 @@ def test_fill_mode_full_e2e(tmp_root, session_id):
     all_events = events_phase1 + events_phase2 + events_phase3
     tool_names = [e["name"] for e in all_events if e["type"] == "tool_start"]
     assert "analyze_docx_style_samples" in tool_names
-    assert "bind_styles_to_roles" in tool_names
+    assert "define_style_profile" in tool_names
     assert "write_markdown_draft" in tool_names

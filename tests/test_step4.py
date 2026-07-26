@@ -170,8 +170,11 @@ def test_analyze_style_samples_writes_profile_to_session_sandbox():
 
 
 def test_llm_sees_no_session_id_in_tools_schema():
-    """Test 7: 7 个 SESSION_TOOLS 的 tools_schema **不**含 session_id 字段 (避坑 1 核心)"""
+    """Test 7: SESSION_TOOLS 中注册到 TOOLS_SCHEMA 的工具不含 session_id 字段 (避坑 1 核心)"""
+    schema_names = {s["function"]["name"] for s in TOOLS_SCHEMA}
     for tool_name in agent.SESSION_TOOLS:
+        if tool_name not in schema_names:
+            continue  # 未注册的工具（如已废弃的 bind_styles_to_roles）不需要检查
         schema = next(s for s in TOOLS_SCHEMA if s["function"]["name"] == tool_name)
         params = schema["function"]["parameters"]
         properties = params.get("properties", {})

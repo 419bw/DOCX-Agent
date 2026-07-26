@@ -40,14 +40,14 @@ def _write_profile(path: Path, sample_ids: list[str]) -> None:
 
 class TestBindStylesToRoles:
     def test_basic_bind_writes_role_bindings(self, tmp_root, session_id):
-        """正常绑定 5 个角色 → 写回 profile.role_bindings 字段."""
+        """正常绑定 8 个角色 → 写回 profile.role_bindings 字段."""
         profile_path = _ws(tmp_root, session_id) / "style_profile.json"
-        _write_profile(profile_path, ["S001", "S002", "S003", "S004", "S005"])
+        _write_profile(profile_path, [f"S{i:03d}" for i in range(1, 9)])
 
-        # FIXED_ROLES 应有 5 个角色
-        assert len(FIXED_ROLES) == 5, f"FIXED_ROLES 应 5 个, 实际 {len(FIXED_ROLES)}"
+        # FIXED_ROLES 已扩展到 8 个角色 (style-review-redesign)
+        assert len(FIXED_ROLES) == 8, f"FIXED_ROLES 应 8 个, 实际 {len(FIXED_ROLES)}"
 
-        bindings = {role: f"S00{i+1}" for i, role in enumerate(FIXED_ROLES)}
+        bindings = {role: f"S{i+1:03d}" for i, role in enumerate(FIXED_ROLES)}
         result = json.loads(bind_styles_to_roles(
             session_id, "style_profile.json", bindings
         ))
