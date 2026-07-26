@@ -21,9 +21,10 @@ VALID_HIGHLIGHTS = {
 }
 
 VALID_UNDERLINES = {
-    "single", "double", "dash", "dotted", "thick",
-    "dashSmallGap", "dashDotStroked", "threeDEmboss",
-    "threeDEngrave", "wavy", "words",
+    "single", "double", "thick", "dotted", "dottedHeavy",
+    "dash", "dashedHeavy", "dashLong", "dashLongHeavy",
+    "dotDash", "dashDotHeavy", "dotDotDash", "dashDotDotHeavy",
+    "wave", "wavyHeavy", "wavyDouble", "words", "none",
 }
 
 _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")

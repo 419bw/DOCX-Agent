@@ -155,7 +155,7 @@ yellow, green, cyan, magenta, blue, red, darkBlue, darkCyan, darkGreen, darkMage
 left（左对齐）、center（居中）、right（右对齐）、both（两端对齐）
 
 ### 下划线 (underline)
-single、double、dash、dotted、thick、wavy
+single、double、thick、dotted、dash、wave、wavyDouble、words、none
 
 ### 段落底纹 (shading_fill)
 6 位 hex RGB，常用：F2F2F2 浅灰、FFFFCC 浅黄、E6F2FF 浅蓝、E8F5E9 浅绿
