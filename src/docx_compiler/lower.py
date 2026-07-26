@@ -331,7 +331,11 @@ def _parse_inline_runs(text: str) -> list[RunIR]:
             if end == -1:
                 _append_text_runs(runs, text[bold:], bold=False)
                 break
-            _append_text_runs(runs, text[bold + 2 : end], bold=True)
+            inner = text[bold + 2 : end]
+            inner_runs = _parse_inline_runs(inner)
+            for run in inner_runs:
+                run.bold = True
+            runs.extend(inner_runs)
             cursor = end + 2
     return runs
 
