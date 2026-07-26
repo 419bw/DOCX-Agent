@@ -10,8 +10,8 @@ from md_tools.read_markdown_draft import read_markdown_draft, tools_schema as re
 from md_tools.write_markdown_draft import write_markdown_draft, tools_schema as write_markdown_draft_schema
 
 from .analyze_docx_style_samples import analyze_docx_style_samples, tools_schema as analyze_docx_style_samples_schema
-from .bind_styles_to_roles import bind_styles_to_roles, tools_schema as bind_styles_to_roles_schema
 from .clear_table_cell import clear_table_cell, tools_schema as clear_table_cell_schema
+from .define_style_profile import define_style_profile, tools_schema as define_style_profile_schema
 from .delete_text import delete_text, tools_schema as delete_text_schema
 from .delete_table_row import delete_table_row, tools_schema as delete_table_row_schema
 from .diff_docx import diff_docx, tools_schema as diff_docx_schema
@@ -53,7 +53,7 @@ from basic_tools.read import read, tools_schema as read_schema
 
 TOOLS = {
     "analyze_docx_style_samples": analyze_docx_style_samples,
-    "bind_styles_to_roles": bind_styles_to_roles,
+    "define_style_profile": define_style_profile,
     "read_docx_structure": read_docx_structure,
     "find_text": find_text,
     "write_markdown_draft": write_markdown_draft,
@@ -91,7 +91,7 @@ TOOLS = {
 
 TOOLS_SCHEMA = [
     analyze_docx_style_samples_schema,
-    bind_styles_to_roles_schema,
+    define_style_profile_schema,
     read_docx_structure_schema,
     find_text_schema,
     write_markdown_draft_schema,

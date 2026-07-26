@@ -29,6 +29,7 @@ SESSION_TOOLS = {
     "markdown_to_word",
     "analyze_docx_style_samples",
     "bind_styles_to_roles",
+    "define_style_profile",
     # v2: basic_tools 沙箱化 (Phase 3a)
     "ls",
     "read",
