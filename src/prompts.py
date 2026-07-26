@@ -166,6 +166,11 @@ font_size_half_points(str), font_size_cs_half_points(str), font_ascii(str), font
 
 ### paragraph_format 字段清单
 style_id(str), alignment(枚举), shading_fill(hex)
+
+### 排版惯例
+- 代码块 (code_block) 字号通常比正文小一号（如正文小四则代码用五号），字体固定为 Consolas、底色固定为浅灰，这两项无需设置。
+- 标题 (title) 通常居中、加粗；章节标题 (section_heading) 通常左对齐、加粗。
+- 正文 (body) 学术/公文类文档通常两端对齐 (both)。
 """.strip()
 
 
