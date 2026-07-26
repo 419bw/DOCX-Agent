@@ -717,7 +717,8 @@ def apply_sample_paragraph_format(paragraph, style_sample: dict):
     paragraph_format = style_sample.get("paragraph_format") or {}
     style_id = paragraph_format.get("style_id")
     alignment = paragraph_format.get("alignment")
-    if style_id is None and alignment is None:
+    shading_fill = paragraph_format.get("shading_fill")
+    if style_id is None and alignment is None and shading_fill is None:
         return
     ppr = paragraph.find(f"{W}pPr")
     if ppr is None:
@@ -725,10 +726,17 @@ def apply_sample_paragraph_format(paragraph, style_sample: dict):
         paragraph.insert(0, ppr)
     _remove_ppr_child(ppr, "pStyle")
     _remove_ppr_child(ppr, "jc")
+    _remove_ppr_child(ppr, "shd")
     if style_id:
         elem = etree.Element(f"{W}pStyle")
         elem.set(f"{W}val", style_id)
         ppr.append(elem)
+    if shading_fill:
+        shd = etree.Element(f"{W}shd")
+        shd.set(f"{W}val", "clear")
+        shd.set(f"{W}color", "auto")
+        shd.set(f"{W}fill", shading_fill)
+        ppr.append(shd)
     if alignment:
         elem = etree.Element(f"{W}jc")
         elem.set(f"{W}val", alignment)
