@@ -177,6 +177,12 @@ def _sample_id_for_block(block: MarkdownBlock, style_mapping: dict) -> str | Non
     block_type = block.block_type
     if block_type == "table":
         return style_mapping.get("table_cell") or style_mapping.get("paragraph") or style_mapping.get("table")
+    if block_type == "heading1":
+        return style_mapping.get("heading1") or style_mapping.get("paragraph")
+    if block_type == "heading2":
+        return style_mapping.get("heading2") or style_mapping.get("heading1") or style_mapping.get("paragraph")
+    if block_type == "list_item":
+        return style_mapping.get("list_item") or style_mapping.get("paragraph")
     if block_type == "code_block":
         return style_mapping.get("code_block") or style_mapping.get("paragraph")
     if block_type == "formula_block":
