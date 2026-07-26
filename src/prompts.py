@@ -76,7 +76,7 @@ TOOL_SELECTION_SYSTEM_PROMPT = """
 
 
 # === 各阶段允许 LLM 调用的工具名集合 ===
-REVIEW_TOOL_NAMES = {"analyze_docx_style_samples", "bind_styles_to_roles", "read_docx_structure", "ls"}
+REVIEW_TOOL_NAMES = {"analyze_docx_style_samples", "define_style_profile", "read_docx_structure", "ls"}
 MD_DRAFT_TOOL_NAMES = {
     "write_markdown_draft",
     "read_markdown_draft",
@@ -118,6 +118,62 @@ SYSTEM_PROMPT = """
 """.strip()
 
 
+# === 格式参考文档（拼入 STYLE_REVIEW 阶段 prompt） ===
+FORMATTING_REFERENCE = """
+## 格式参考
+
+### 字体名
+- **中文 (font_east_asia)**: 宋体、黑体、楷体、仿宋、微软雅黑
+- **西文 (font_ascii / font_hAnsi)**: Times New Roman、Calibri、Arial、Courier New、Consolas
+
+### 字号换算 (font_size_half_points = 磅值 x 2)
+| 中文字号 | 磅值 | half_points |
+|---------|------|-------------|
+| 初号 | 42pt | 84 |
+| 小初 | 36pt | 72 |
+| 一号 | 26pt | 52 |
+| 小一 | 24pt | 48 |
+| 二号 | 22pt | 44 |
+| 小二 | 18pt | 36 |
+| 三号 | 16pt | 32 |
+| 小三 | 15pt | 30 |
+| 四号 | 14pt | 28 |
+| 小四 | 12pt | 24 |
+| 五号 | 10.5pt | 21 |
+| 小五 | 9pt | 18 |
+| 六号 | 7.5pt | 15 |
+
+### 颜色 (color / shading_fill)
+6 位 hex RGB，常用色：
+- 000000 黑、FF0000 红、0000FF 蓝、008000 绿、808080 灰
+- FF6600 橙、9933CC 紫、0099CC 青、CC0000 深红、336699 钢蓝
+
+### 荧光笔 (highlight) — 固定枚举
+yellow, green, cyan, magenta, blue, red, darkBlue, darkCyan, darkGreen, darkMagenta, darkRed, darkYellow, lightGray, black, none
+
+### 对齐 (alignment)
+left（左对齐）、center（居中）、right（右对齐）、both（两端对齐）
+
+### 下划线 (underline)
+single、double、thick、dotted、dash、wave、wavyDouble、words、none
+
+### 段落底纹 (shading_fill)
+6 位 hex RGB，常用：F2F2F2 浅灰、FFFFCC 浅黄、E6F2FF 浅蓝、E8F5E9 浅绿
+
+### format 字段清单
+bold(bool), bold_cs(bool), italic(bool), underline(str), color(hex), highlight(枚举),
+font_size_half_points(str), font_size_cs_half_points(str), font_ascii(str), font_east_asia(str)
+
+### paragraph_format 字段清单
+style_id(str), alignment(枚举), shading_fill(hex)
+
+### 排版惯例
+- 代码块 (code_block) 字号通常比正文小一号（如正文小四则代码用五号），字体固定为 Consolas、底色固定为浅灰，这两项无需设置。
+- 标题 (title) 通常居中、加粗；章节标题 (section_heading) 通常左对齐、加粗。
+- 正文 (body) 学术/公文类文档通常两端对齐 (both)。
+""".strip()
+
+
 def tool_schemas_for_state(state: str):
     if state == STYLE_REVIEW:
         allowed = REVIEW_TOOL_NAMES
@@ -132,14 +188,15 @@ def state_prompt(state: str, available_tool_schemas) -> str:
     if state == STYLE_REVIEW:
         state_rule = """
 当前状态：样式审核。
-你的任务：仅对模板文档进行只读分析，提取格式特征与文档结构。
+你的任务：分析模板文档的格式特征，然后自行决定每个角色应使用的格式参数。
 规则：
-1. 你现在只能做样式和结构分析，不能编辑文档。
-2. 请优先调用 analyze_docx_style_samples；若文档路径不明确，可用 ls 查看目录找到 docx 文件后调用 read_docx_structure。ls 仅用于定位文档路径，严禁浏览与文档无关的其他目录。
-3. 此阶段唯一目标是提取 docx 自身的样式和结构信息。如果用户请求中提到了与 docx 不相关的其他文件或目录（如代码、截图、图片等），在本阶段完全忽略它们。你当前阶段的唯一有效输出是样式分析结果，其他意图均无法执行。
-4. 拿到样式样本后，用简短中文列出你建议的正文、章节标题、表格字段名、表格填写值等 sample_id 与文档结构概述，并提示用户核对。
-5. 在用户确认样式之前，你必须调用 bind_styles_to_roles，**先读取 style_samples 数组**（每个 sample 的 format / paragraph_format / context 字段），根据字体/字号/颜色/上下文为 5 个标准角色（title / section_heading / body / table_cell / placeholder）**各显式选一个最匹配的 sample_id**，通过 bindings 参数传入。**不允许省略任何角色，也不允许凭印象分配**——找不到合适 sample 的角色也要选最接近的。
-6. 列出样式建议和结构概述后，你必须立刻停止回答并等待用户确认！不要继续查看其他目录或文件，不要谈及草稿生成或下一阶段工作。
+1. 你现在只能做样式分析和格式定义，不能编辑文档。
+2. 请先调用 analyze_docx_style_samples 分析模板文档；若文档路径不明确，可用 ls 查看目录找到 docx 文件后调用 read_docx_structure。ls 仅用于定位文档路径，严禁浏览与文档无关的其他目录。
+3. 此阶段唯一目标是分析模板格式并定义写入样式。如果用户请求中提到了与 docx 不相关的其他文件或目录（如代码、截图、图片等），在本阶段完全忽略它们。
+4. 拿到样式样本后，仔细阅读每个 sample 的 format / paragraph_format / context / examples 字段，理解模板中正文、标题、表格等区域实际使用的字体、字号、加粗、对齐方式。
+5. 然后调用 define_style_profile，**由你自己决定**每个角色的格式参数。可用角色：title / section_heading / body / list_item / table_cell / code_block / image / placeholder。至少定义 body 角色，其余角色若与 body 格式相同可以不定义（自动继承 body）。格式字段的合法取值见下方格式参考。
+6. 定义格式时以模板分析结果为参考，保持与文档整体风格一致。模板中已有明确格式的区域（如正文、标题），按模板来；模板中内容不足或没有先例的区域，根据文档类型和排版惯例自行决定合理的格式。
+7. 列出你定义的格式方案和文档结构概述后，你必须立刻停止回答并等待用户确认！不要继续查看其他目录或文件，不要谈及草稿生成或下一阶段工作。
 """.strip()
     elif state == MD_DRAFT:
         state_rule = """
@@ -172,6 +229,8 @@ def state_prompt(state: str, available_tool_schemas) -> str:
 9. 如果草稿中还需要补绘制流程图、状态机、架构图等有逻辑结构的图，优先用 render_diagram，**强烈优先用 Graphviz DOT 语法**（视觉效果显著优于 Mermaid），将返回的 path 用 ![描述|center](path) 语法补进 markdown 草稿后再走 markdown_to_word 编译。Mermaid 仅在用户明确点名或需要甘特图时使用。不要用 generate_image 画这类图（文生图对结构化图节点错位、文字模糊）。
 """.strip()
 
+    if state == STYLE_REVIEW:
+        return f"{state_rule}\n\n{FORMATTING_REFERENCE}\n\n当前可用工具：\n{render_tools_prompt(available_tool_schemas)}"
     return f"{state_rule}\n\n当前可用工具：\n{render_tools_prompt(available_tool_schemas)}"
 
 

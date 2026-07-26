@@ -177,6 +177,12 @@ def _sample_id_for_block(block: MarkdownBlock, style_mapping: dict) -> str | Non
     block_type = block.block_type
     if block_type == "table":
         return style_mapping.get("table_cell") or style_mapping.get("paragraph") or style_mapping.get("table")
+    if block_type == "heading1":
+        return style_mapping.get("heading1") or style_mapping.get("paragraph")
+    if block_type == "heading2":
+        return style_mapping.get("heading2") or style_mapping.get("heading1") or style_mapping.get("paragraph")
+    if block_type == "list_item":
+        return style_mapping.get("list_item") or style_mapping.get("paragraph")
     if block_type == "code_block":
         return style_mapping.get("code_block") or style_mapping.get("paragraph")
     if block_type == "formula_block":
@@ -325,7 +331,11 @@ def _parse_inline_runs(text: str) -> list[RunIR]:
             if end == -1:
                 _append_text_runs(runs, text[bold:], bold=False)
                 break
-            _append_text_runs(runs, text[bold + 2 : end], bold=True)
+            inner = text[bold + 2 : end]
+            inner_runs = _parse_inline_runs(inner)
+            for run in inner_runs:
+                run.bold = True
+            runs.extend(inner_runs)
             cursor = end + 2
     return runs
 

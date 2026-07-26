@@ -66,18 +66,17 @@ class WorkflowTransitions:
         """STYLE_REVIEW 阶段收尾评估。
 
         行为:
-        - 校验未通过 (缺 analyze_docx_style_samples / bind_styles_to_roles) → return correct
+        - 校验未通过 (缺 analyze_docx_style_samples / define_style_profile) → return correct
         - pending_feedback is None → return yield_approval (等用户审批)
         - pending_feedback.type != "approve" → return revise + error event
         - approved=True → return advance to MD_DRAFT
         - approved=False → return revise (agent 重新跑 LLM 在 STYLE_REVIEW 状态)
         """
         called = stage_called_tools.get(STYLE_REVIEW, set())
-        if "analyze_docx_style_samples" not in called or "bind_styles_to_roles" not in called:
+        if "analyze_docx_style_samples" not in called or "define_style_profile" not in called:
             correction_msg = (
-                "请先调用 analyze_docx_style_samples 分析样式，"
-                "再读取 style_samples 数组并显式调用 bind_styles_to_roles"
-                "（bindings 必须填 5 个标准角色的 sample_id），"
+                "请先调用 analyze_docx_style_samples 分析模板样式，"
+                "再参考分析结果调用 define_style_profile 定义各角色的格式参数，"
                 "最后再让用户审核。"
             )
             return TransitionDirective(

@@ -47,7 +47,7 @@ def test_save_to_disk_writes_3_json():
     agent._round_index = 7
     agent.workflow_state = "md_draft"
     agent.draft_files_written = ["drafts/cover.md"]
-    agent.stage_called_tools = {"style_review": {"analyze_docx_style_samples", "bind_styles_to_roles"}}
+    agent.stage_called_tools = {"style_review": {"analyze_docx_style_samples", "define_style_profile"}}
 
     # 触发 save
     agent.save_to_disk()
@@ -76,7 +76,7 @@ def test_save_to_disk_writes_3_json():
     # 验证 workflow 字段
     workflow = json.loads((session_dir / "workflow.json").read_text(encoding="utf-8"))
     assert workflow["workflow_state"] == "md_draft"
-    assert workflow["stage_called_tools"]["style_review"] == ["analyze_docx_style_samples", "bind_styles_to_roles"]
+    assert workflow["stage_called_tools"]["style_review"] == ["analyze_docx_style_samples", "define_style_profile"]
     assert workflow["draft_files_written"] == ["drafts/cover.md"]
     assert workflow["round_index"] == 7
 
