@@ -11,7 +11,7 @@ AI 驱动的 Word 文档编辑 Agent，基于 LLM 工具调用 + 直接 OpenXML 
 - **Markdown 编译器** — `markdown → AST → IR → OpenXML` 多阶段编译管线，支持标题、段落、列表、表格、代码块、公式、图片
 - **图片插入** — 本地图片嵌入，自动处理 DrawingML XML、关系链、Content Type 注册
 - **多模态识图** — 适配多模态视觉模型（SenseNova）分析图表与截图
-- **样式感知** — 提取模板格式样本，编辑时保持统一风格
+- **样式感知** — 分析模板格式后由 AI 自定义各角色的字体、字号、对齐等参数，编辑时保持统一风格
 - **变更验证** — 编辑后自动 diff 对比原文档
 - **会话持久化（v2）** — 每个 session 一个目录 `out/sessions/<id>/`，含 3 个 JSON + 子目录；前端删 IndexedDB，后端是 source of truth
 - **切 session 不掉线（v2）** — WS resume 重建上下文，approval 按钮可继续点
@@ -24,7 +24,7 @@ AI 驱动的 Word 文档编辑 Agent，基于 LLM 工具调用 + 直接 OpenXML 
 
 | 阶段 | 职责 | 可用工具（节选） |
 |------|------|---------|
-| **样式审核** | 只读分析模板格式特征与文档结构 | `analyze_docx_style_samples`, `bind_styles_to_roles`, `read_docx_structure`, `ls` |
+| **样式审核** | 分析模板格式 + AI 自定义格式参数 | `analyze_docx_style_samples`, `define_style_profile`, `read_docx_structure`, `ls` |
 | **Markdown 草稿** | 按文档区域生成结构化 Markdown 内容 | `write_markdown_draft`, `read_markdown_draft`, `parse_markdown_draft`, `ls`, `read`, `analyze_image_content` |
 | **Word 写入** | 编译 Markdown 写入 DOCX，diff 验证 | `read_docx_structure`, `write_markdown_draft`, `read_markdown_draft`, `parse_markdown_draft`, `markdown_to_word`, `diff_docx`, `ls`, `read`, `analyze_image_content` |
 
@@ -268,7 +268,7 @@ LLM 看到的 30+ 个工具，**全部**接受业务参数（不感知 `session_
 |------|------|
 | `analyze_docx_style_samples` | 提取文档格式样本 → 写到 `session_dir/style_profiles/` |
 | `read_docx_structure` | 读取段落文本、表格结构、位置坐标 |
-| `bind_styles_to_roles` | 绑定 sample_id 到 5 个标准角色 |
+| `define_style_profile` | AI 自定义各角色格式参数（字体/字号/加粗/颜色/对齐/底纹），写入 style_profile.json |
 | `find_text` | 搜索文本，返回段落索引和字符偏移 |
 | `insert_text_at` | 在锚点偏移处插入文本 |
 | `insert_text_in_table_cell` | 在表格单元格内插入文本 |
@@ -349,7 +349,8 @@ src/
 │   ├── registry.py            # TOOLS_SCHEMA + call_tool (反射调用 + kwargs 展开)
 │   ├── common.py
 │   ├── analyze_docx_style_samples.py  # profile 写到 session_dir/style_profiles/
-│   ├── bind_styles_to_roles.py
+│   ├── define_style_profile.py  # AI 自定义格式参数
+│   ├── bind_styles_to_roles.py  # (已废弃, 保留兼容)
 │   ├── read_docx_structure.py
 │   ├── find_text.py / replace_text.py / ...
 │   └── diff_docx.py
